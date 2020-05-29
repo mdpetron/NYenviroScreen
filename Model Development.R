@@ -7,7 +7,7 @@
 names(ny_enviro_screen_data)
 
 df <- ny_enviro_screen_data %>%
-  select(######sociodemo######## 
+  dplyr::select(######sociodemo######## 
          MINORPCT, #minority
          LOWINCPCT, #lowincome
          LESSHSPCT, #eductional attainment 
@@ -24,72 +24,129 @@ df <- ny_enviro_screen_data %>%
          `Percentage of preterm birth - 2016`, # premies
          PercentDisability, #disabled
          #food insecurity?
+         
          #### Exposures  #####
+         OZONE, #ozone
+         PM25, #pm25
+         RESP, #HAPS RESP
+         PTRAF, # traffic prox/volumne
+         DSLPM, #
+         CANCER,
+         DrinkWaterScore,
+         #pesticides, Deisel, Drinking water
          
+         #### Environmental Affect  #####
+         PWDIS, #prox to water discharges
+         PNPL, #prox to superfund sites
+         PRMP, #prox to facilities with HAZ chems onsite
+         PTSDF, #prox to haz waste disposal facilities 
+         PRE1960PCT, #lead paint indicator 
          
+         #### Physical Vulnerability  #####
+         HVIScore, #heat vulnerability index
+         shr_hu_fp_any, #share of housing units in the 100 or 500 years Flood plain
          
-         PRE1960PCT, #housing)
+         #### Evaluation Metrics ####
+         ID,
+         medincome,
+         population,
+         white_alone,
+         black_alone,
+         Native_American,
+         Asian_alone,
+         other_alone,
+         two_or_more,
+         Hispanic,
+         #income
+         Households,
+         inc_lessthan10k,
+         inc_10to15,
+         inc_15to20,
+         inc_20to25,
+         inc_25to30,
+         inc_30to35,
+         inc_35to40,
+         inc_40to45,
+         inc_45to50,
+         inc_50to60,
+         inc_60to75,
+         inc_75to100,
+         inc_100to125,
+         inc_125to150,
+         inc_150to200,
+         inc_200plus)
 
 #get state rank for the sociodemogrpahic indicators 
-df <- df %>% mutate(SP_MINORPCT = percent_rank(MINORPCT),
-                    SP_LOWINCPCT = percent_rank(LOWINCPCT),
-                    SP_LESSHSPCT = percent_rank(LESSHSPCT),
-                    SP_PRE1960PCT = percent_rank(PRE1960PCT),
-                    SP_LINGISOPCT = percent_rank(LINGISOPCT),
-                    SP_UNDER5PCT = percent_rank(UNDER5PCT),
-                    SP_OVER64PCT = percent_rank(OVER64PCT))
+df <- df %>% 
+  mutate(StP_MINORPCT = percent_rank(MINORPCT),
+         StP_LOWINCPCT = percent_rank(LOWINCPCT),
+         StP_LESSHSPCT = percent_rank(LESSHSPCT),
+         StP_PRE1960PCT = percent_rank(PRE1960PCT),
+         StP_LINGISOPCT = percent_rank(LINGISOPCT),
+         StP_UNDER5PCT = percent_rank(UNDER5PCT),
+         StP_OVER64PCT = percent_rank(OVER64PCT),
+         StP_PercentDisability = percent_rank(PercentDisability),
+         StP_PercentUnemployed = percent_rank(PercentUnemployed),
+         StP_heart_atack = percent_rank(`Age-adjusted heart attack hospitalization rate per 10,000 population - 2014`),
+         StP_asthma = percent_rank(`Asthma emergency department visit rate per 10,000 population - 2014`),
+         StP_premature_death = percent_rank(`Percentage of premature deaths (before age 65 years) - 2016`),
+         StP_preterm_birth = percent_rank(`Percentage of preterm birth - 2016`),
+         StP_OZONE = percent_rank(OZONE),
+         StP_PM25 = percent_rank(PM25),
+         StP_RESP = percent_rank(RESP),
+         StP_PTRAF = percent_rank(PTRAF),
+         StP_CANCER = percent_rank(CANCER),
+         StP_DrinkWaterScore = percent_rank(DrinkWaterScore),
+         StP_PWDIS = percent_rank(PWDIS),
+         StP_PNPL = percent_rank(PNPL),
+         StP_PRMP = percent_rank(PRMP),
+         StP_PTSDF = percent_rank(PTSDF),
+         StP_PRE1960PCT = percent_rank(PRE1960PCT),
+         StP_HVIScore = percent_rank(HVIScore),
+         StP_shr_hu_fp_any = percent_rank(shr_hu_fp_any))
 
 
+#Setup the default model groupings
 
-  # combine multiple indicators, create percentiles 
+df <- df %>% group_by(ID) %>% 
+  mutate(exposure = mean(as.numeric(StP_PTRAF),
+                         as.numeric(StP_OZONE),
+                         as.numeric(StP_PRE1960PCT), 
+                         as.numeric(StP_RESP),
+                         as.numeric(StP_CANCER),
+                         as.numeric(StP_PM25),
+                         as.numeric(StP_DSLPM),
+                         as.numeric(StP_DrinkWaterScore),
+                         SP_TC, na.rm = T)*100,
+         
+         effects = mean(as.numeric(StP_PWDIS),
+                        as.numeric(StP_PNPL),
+                        as.numeric(StP_PTSDF),
+                        as.numeric(StP_PRMP),
+                        na.rm = T)*100,
+         
+         Sensitivepops = mean(as.numeric(StP_UNDER5PCT),
+                              as.numeric(StP_OVER64PCT),
+                              as.numeric(StP_heart_atack),
+                              as.numeric(StP_asthma),
+                              as.numeric(StP_premature_death),
+                              as.numeric(StP_PercentDisability),
+                              as.numeric(StP_preterm_birth),
+                              as.numeric(StP_HVIScore),
+                              as.numeric(StP_shr_hu_fp_any),
+                              na.rm = T)*100,
+         
+         SocioEcon = mean(as.numeric(StP_LOWINCPCT),
+                          as.numeric(StP_LESSHSPCT),
+                          as.numeric(StP_LINGISOPCT),
+                          as.numeric(StP_PercentUnemployed),
+                          as.numeric(StP_MINORPCT),
+                          na.rm = T)*100) %>% ungroup()
 
-TractsR1 <- TractsR %>% mutate(SP_ARTHRITIS_CrudePrev = percent_rank(ARTHRITIS_CrudePrev),
-                               SP_CASTHMA_CrudePrev = percent_rank(CASTHMA_CrudePrev),
-                               SP_BPHIGH_CrudePrev = percent_rank(BPHIGH_CrudePrev),
-                               SP_CANCER_CrudePrev = percent_rank(CANCER_CrudePrev),
-                               SP_DIABETES_CrudePrev = percent_rank(DIABETES_CrudePrev),
-                               SP_KIDNEY_CrudePrev = percent_rank(KIDNEY_CrudePrev),
-                               SP_STROKE_CrudePrev = percent_rank(STROKE_CrudePrev),
-                               SP_TEETHLOST_CrudePrev = percent_rank(TEETHLOST_CrudePrev),
-                               SP_PHLTH_CrudePrev = percent_rank(PHLTH_CrudePrev),
-                               SP_MHLTH_CrudePrev = percent_rank(MHLTH_CrudePrev),
-                               SP_CHD_CrudePrev = percent_rank(CHD_CrudePrev),
-                               SP_HIGHCHOL_CrudePrev = percent_rank(HIGHCHOL_CrudePrev))
 
-df <- left_join(blockG, TractsR1, by = c("GEOIDTR" = "tract"))
-
-#get state rank for the sociodemogrpahic indicators 
-df <- df %>% mutate(SP_MINORPCT = percent_rank(MINORPCT),
-                    SP_LOWINCPCT = percent_rank(LOWINCPCT),
-                    SP_LESSHSPCT = percent_rank(LESSHSPCT),
-                    SP_PRE1960PCT = percent_rank(PRE1960PCT),
-                    SP_LINGISOPCT = percent_rank(LINGISOPCT),
-                    SP_UNDER5PCT = percent_rank(UNDER5PCT),
-                    SP_OVER64PCT = percent_rank(OVER64PCT),
-                    blockTC1 = blockTC.x/(ALAND10 + AWATER10),
-                    SP_TC = percent_rank((blockTC1)),
-                    SP_SCORE = percent_rank((blockScore.x)))
-
-#get state rank for the health indicators 
-
-df <- df %>% group_by(blockG) %>% mutate(exposure = mean(as.numeric(SP_PTRAF), as.numeric(SP_OZONE), as.numeric(SP_PRE1960PCT), 
-                                                         as.numeric(SP_RESP), as.numeric(SP_CANCER), as.numeric(SP_PM25),
-                                                         as.numeric(SP_DSLPM), SP_TC, na.rm = T)*10,
-                                         
-                                         effects = mean(as.numeric(SP_PWDIS), as.numeric(SP_PNPL), as.numeric(SP_PTSDF), as.numeric(SP_PRMP), na.rm = T)*10,
-                                         
-                                         Sensitivepops = mean(SP_UNDER5PCT, SP_OVER64PCT, SP_MINORPCT,SP_ARTHRITIS_CrudePrev,SP_CASTHMA_CrudePrev,
-                                                              SP_BPHIGH_CrudePrev,SP_CANCER_CrudePrev,SP_DIABETES_CrudePrev,SP_KIDNEY_CrudePrev, SP_STROKE_CrudePrev,
-                                                              SP_TEETHLOST_CrudePrev,SP_PHLTH_CrudePrev,SP_MHLTH_CrudePrev,SP_CHD_CrudePrev,SP_HIGHCHOL_CrudePre, na.rm = T)*10,
-                                         
-                                         SocioEcon = mean(SP_LOWINCPCT, SP_LESSHSPCT, SP_LINGISOPCT, na.rm = T)*10) 
-
-df <- df %>% ungroup()
 
 df$PopChar <- ((df$SocioEcon + df$Sensitivepops)/2)
-
 df$PolBur  <- ((df$exposure + (df$effects/2))/1.5)
-
 df$PolBurSc <- (df$PolBur/max(df$PolBur, na.rm = T))*10
 df$PopCharSc <- (df$PopChar/max(df$PopChar, na.rm = T))*10
 

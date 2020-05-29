@@ -94,8 +94,62 @@ Food_insecure <- read_excel("data/DataDownload2015.xlsx",
 Food_insecure_ny <- Food_insecure %>% filter(State == "New York")
 #this does not have all of our tracts 
 
-#additional indicators.... 
+# Drinking water
+# https://www.health.ny.gov/statistics/environmental/public_health_tracking/about_pages/drinking_water/export
+# see page 26 for method https://oehha.ca.gov/media/downloads/calenviroscreen/report/ces3dwmethodology.pdf
+NY_drink <- read_csv("https://apps.health.ny.gov/statistics/environmental/public_health_tracking/tracker/files/water/drinking_water.csv")
+#create a county average (blunt but all we can do right now)
 
+NY_drink <- left_join(NY_Drink, countykey, by = c("PRIN_CNTY" = "County Name"))
+
+#take the most recent year... 2009? 
+NY_drink_09 <- NY_drink %>% filter(YEAR == 2009)
+unique(NY_drink_09$PRIN_CNTY)
+
+#make the NA values 
+NY_drink_09 <- NY_drink_09 %>%
+  mutate(ASMAXCONC = ifelse(ASMAXCONC == -999, NA, ASMAXCONC),
+         NITRATEMAXCONC  = ifelse(NITRATEMAXCONC  == -999, NA, NITRATEMAXCONC),
+         TTHMMAXCONC = ifelse(TTHMMAXCONC == -999, NA, TTHMMAXCONC),
+         HAA5MAXCONC = ifelse(HAA5MAXCONC == -999, NA, HAA5MAXCONC)) %>%
+  mutate(ASMAXCONC_pop = ASMAXCONC*SYSTEM_POPULATION,
+         NITRATEMAXCONC_pop  = NITRATEMAXCONC*SYSTEM_POPULATION,
+         TTHMMAXCONC_pop = TTHMMAXCONC*SYSTEM_POPULATION,
+         HAA5MAXCONC_pop = HAA5MAXCONC*SYSTEM_POPULATION)
+
+#Population weighted averages
+NY_drink_09 <- NY_drink_09 %>% group_by(PRIN_CNTY, GEOID) %>%
+  summarise(county_pop = sum(SYSTEM_POPULATION),
+            ASMAXCONC_w = sum(ASMAXCONC_pop, na.rm = T),
+         NITRATEMAXCONC_w  = sum(NITRATEMAXCONC_pop, na.rm = T),
+         TTHMMAXCONC_w = sum(TTHMMAXCONC_pop, na.rm = T),
+         HAA5MAXCONC_w = sum(HAA5MAXCONC_pop, na.rm = T)) %>% ungroup()
+
+NY_drink_09 <- NY_drink_09 %>% 
+  transmute(GEOID = GEOID,
+            ASMAXCONC_w = ASMAXCONC_w/county_pop,
+            NITRATEMAXCONC_w  = NITRATEMAXCONC_w/county_pop,
+            TTHMMAXCONC_w = TTHMMAXCONC_w/county_pop,
+            HAA5MAXCONC_w = HAA5MAXCONC_w/county_pop)
+
+#percentile each contaminant, then sum for score
+
+NY_drink_09_P <- NY_drink_09 %>% 
+  transmute(GEOID = GEOID,
+            ASMAXCONC_P = percent_rank(ASMAXCONC_w)*100,
+            NITRATEMAXCONC_P  = percent_rank(NITRATEMAXCONC_w)*100,
+            TTHMMAXCONC_P = percent_rank(TTHMMAXCONC_w)*100,
+            HAA5MAXCONC_P = percent_rank(HAA5MAXCONC_w)*100) %>%
+  mutate(DrinkWaterScore = ASMAXCONC_P + NITRATEMAXCONC_P + TTHMMAXCONC_P + HAA5MAXCONC_P)
+
+#pesticide application by county
+# county level, need to scrape
+#https://www.dec.ny.gov/docs/materials_minerals_pdf/prl2013.pdf
+
+# Lots of county level environemtnal indictors from DOH
+# https://www.health.ny.gov/environmental/public_health_tracking/
+
+#additional indicators.... 
 # air majors
 # air minors
 # hazardous waste sites
@@ -130,18 +184,45 @@ census_api_key("3b7f443116b03bdd7ce2f1ff3f2b117cfff19e69")
 # write.csv(v00, "census2000vars.csv")
 # ?load_variables
 
+#these will be used to create charts to quantify coverage,
+#we want race breakout, income breakout
+
 acs2018_ny <- get_acs(geography = "block group", 
         state = "NY",
         variables = c(medincome = "B19013_001",
-                      population = "B01001_001",
+                      population = "B01003_001",
                       white_alone = "B02001_002",
-                      poverty_status_total = "B17001_001",
-                      poverty_below_total = "B17001_002"),
-        year = 2018)
+                      black_alone = "B02001_003",
+                      Native_American = "B02001_004",
+                      Asian_alone = "B02001_005",
+                      other_alone = "B02001_007",
+                      two_or_more = "B02001_008",
+                      Hispanic = "B03001_003",
+                      #income
+                      Households = "B19001_001",
+                      inc_lessthan10k = "B19001_002",
+                      inc_10to15 = "B19001_003",
+                      inc_15to20 = "B19001_004",
+                      inc_20to25 = "B19001_005",
+                      inc_25to30 = "B19001_006",
+                      inc_30to35 = "B19001_007",
+                      inc_35to40 = "B19001_008",
+                      inc_40to45 = "B19001_009",
+                      inc_45to50 = "B19001_010",
+                      inc_50to60 = "B19001_011",
+                      inc_60to75 = "B19001_012",
+                      inc_75to100 = "B19001_013",
+                      inc_100to125 = "B19001_014",
+                      inc_125to150 = "B19001_015",
+                      inc_150to200 = "B19001_016",
+                      inc_200plus = "B19001_017"),
+        year = 2018) 
+
+acs2018_ny1 <- acs2018_ny %>% dplyr::select(-moe) %>% spread(variable, estimate) %>% distinct()
 
 #these poverty variables do not work.... 
 
-dc2000_ny <-get_decennial(geography = "block group", 
+dc2000_ny <- get_decennial(geography = "block group", 
               state = "NY", year = 2000,
               variables = c(
                 #White_total = "P012A001",
@@ -226,9 +307,18 @@ names(NY_health_short)
 mydf3$GEOID <- substr(mydf$ID,1,5)
 mydf4 <- left_join(mydf3,NY_health_short)
 
+#drinking water contaiminants 
+mydf5 <- left_join(mydf4,NY_drink_09_P)
+
+#ACS evaluation variables 
+acs2018_ny1$ID <- acs2018_ny1$GEOID
+acs2018_ny1$GEOID <- NULL
+mydf6 <- left_join(mydf5, acs2018_ny1)
+
+
 #holy shit 500 variables!!
 
-ny_enviro_screen_data <- mydf4
+ny_enviro_screen_data <- mydf6
 
 
 
