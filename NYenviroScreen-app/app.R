@@ -6,169 +6,379 @@
 #
 #    http://shiny.rstudio.com/
 #
+# setwd("C:/Users/Mike Petroni/Documents/GitHub/NYenviroScreen/NYenviroScreen-app")
 
 library(shiny)
 library(leaflet)
 library(plotly)
 library(RColorBrewer)
 library(dplyr)
+library(tidyr)
+library(matrixStats)
+
+ejshp <- readRDS("www/ejshp_053020.rds")
+ej2k <- readRDS("www/peja2k_053020.rds")
+peja2k.2 <- subset(ej2k, ej2k$peja2k.1 == 1)
+
+df2k <- as.data.frame(ej2k)
+
+df <- as.data.frame(ejshp)
+df$ALAND <- as.numeric(df$ALAND)
+
+#afunction to use
+
+rowMaxs <- function(df, na.rm=TRUE) {
+    
+    if (is.matrix(df)) {df <- data.frame(df, stringsAsFactors=FALSE, drop = FALSE)}
+    
+    valid.cols <- sapply(df, function(x) { is.numeric(x) || is.logical(x) || is.character(x)})
+    stopifnot(any(valid.cols))
+    # or could just return NA?:
+    # if (!any(valid.cols)) {return(NA)}
+    if (any(!valid.cols) ) {warning('using only numeric (double or integer) or logical or character columns -- ignoring other columns ')}
+    
+    result <- do.call(pmax, c(df[ , valid.cols, drop = FALSE], na.rm=na.rm))
+    
+    result[nononmissing <- rowSums(!is.na(df[ , valid.cols, drop = FALSE]))==0] <- -Inf
+    if (any(nononmissing)) {warning('where no non-missing arguments, returning -Inf')}
+    return(result)
+    
+    # df = data.frame of numeric values, i.e. a list of vectors passed to pmax
+    # Value returned is vector, each element is max of a row of df
+}
 
 
-county_df <- readRDS("www/covid04152020.rds")
+# here is the baseline NYenviroScreen based on Cal-EnviroScreen
+df <- df %>%
+    mutate(exposure = rowMeans(dplyr::select(., StP_PTRAF,
+                                             StP_OZONE,
+                                             StP_PRE1960PCT,
+                                             StP_RESP,
+                                             StP_CANCER,
+                                             StP_PM25,
+                                             StP_DSLPM,
+                                             StP_DrinkWaterScore),
+                               na.rm = T)*100,
+           effects = rowMeans(dplyr::select(., StP_PWDIS,
+                                            StP_PNPL,
+                                            StP_PTSDF,
+                                            StP_PRMP),
+                              na.rm = T)*100,
+           Sensitivepops = rowMeans(dplyr::select(., StP_UNDER5PCT,
+                                                  StP_OVER64PCT,
+                                                  StP_heart_atack,
+                                                  StP_asthma,
+                                                  StP_premature_death,
+                                                  StP_PercentDisability,
+                                                  StP_preterm_birth,
+                                                  StP_HVIScore,
+                                                  StP_shr_hu_fp_any),
+                                    na.rm = T)*100,
+           SocioEcon = rowMeans(dplyr::select(.,StP_LOWINCPCT,
+                                              StP_LESSHSPCT,
+                                              StP_LINGISOPCT,
+                                              StP_PercentUnemployed,
+                                              StP_MINORPCT),
+                                na.rm = T)*100) %>% ungroup()
+#Here is the evaluation
 
-county_df$County <- ifelse(is.na(county_df$County), "Unidentified", county_df$County)
-county_df$County <- as.character(county_df$County)
-names(county_df)
+dfs <- df %>% dplyr::select(38:44, 46:62) %>%
+    summarise_all(sum) %>% gather("Income Bracket",
+                                  "Total NY House Holds 2018")
+dfsb <- df %>% filter(StP_nyeScore >= 75) %>% dplyr::select(38:44, 46:62) %>%
+    summarise_all(sum) %>% gather("Income Bracket",
+                                  "NYeviroScreen Coverage")
+dfsc1 <- df2k %>% mutate(population = totpop) %>%
+    dplyr::select(51:71, 73,75,76) %>%
+    summarise_all(sum, na.rm =T) %>% gather("Income Bracket",
+                                  "Total Households or Population 2000")
+dfsc <- df2k %>% filter(peja2k.1 == 1) %>% mutate(population = totpop) %>%
+    dplyr::select(51:71, 73,75,76) %>%
+    summarise_all(sum) %>% gather("Income Bracket",
+                                  "2000 PEJA Coverage")
 
-y <- c("NATA Respiratory Hazard" = "nataRespHaz",
-       "PM2.5" = "pm25_12_20",
-       "RSEI ToxConc" = "ToxConc_Co_mean",
-       "NATA Naphthalene" = "NAPHTHALENE",
-       "NATA Acrolein" = "ACROLEIN",
-       "NATA Formaldehyde" = "FORMALDEHYDE",
-       "NATA Chloroprene" = "CHLOROPRENE",
-       "NATA Point Source" = "PT-StationaryPoint Respiratory (hazard quotient)",
-       "NATA Secondary" = "SECONDARY Respiratory (hazard quotient)",
-       "Percent Without Active Leisure Time" = "active",
-       "Adult Obesity Rate" = "measurename_mean_12to20_Adult obesity",
-       "Poverty Rate" = "Poverty_Per_mean_12to18",
-       "Median Income" = "median_income_mean_12to18",
-       "Percent African American" = "Black_Per_mean_12to18") 
 
-y2 <- c("Covid Deaths" = "cov_deaths",
-        "Percent Without Active Leisure Time" = "active",
-        "Adult Obesity Rate" = "measurename_mean_12to20_Adult obesity",
-        "Poverty Rate" = "Poverty_Per_mean_12to18",
-        "Median Income" = "median_income_mean_12to18",
-        "Percent African American" = "Black_Per_mean_12to18") 
+dfs <- left_join(dfs, dfsb)
+dfs <- left_join(dfs, dfsc)
+dfs <- left_join(dfs, dfsc1)
 
-x <- unique(county_df$State)
+ComboMeth <- c("Mean", "Sum", "Product", "Maximum")
 
-# Define UI for application that draws a histogram
+#list for the selection 
+SocDem <- c("Minority (%)" = "StP_MINORPCT",
+       "Low Income (%)" = "StP_LOWINCPCT",
+       "Educational Attainment (%)" = "StP_LESSHSPCT",
+       "Linguistic Isolation (%)" = "StP_LINGISOPCT",
+       "Unemployment (%)" = "StP_PercentUnemployed")
+       
+Sensa <- c(
+       "Over 64 (%)" = "StP_OVER64PCT",
+       "Under 5 (%)" = "StP_UNDER5PCT",
+       "Heart Attack*" = "StP_heart_atack",
+       "Asthma*" = "StP_asthma",
+       "Premature Death*" = "StP_premature_death",
+       "Disability (%)" = "StP_PercentDisability",
+       "Preterm Birth*" = "StP_preterm_birth",
+       "Heat Vulnerability*" = "StP_HVIScore",
+       "Homes in Floodplain (%)" = "StP_shr_hu_fp_any") 
+
+exposure <- c("Traffic Proximity*" = "StP_PTRAF",
+        "Ozone*" = "StP_OZONE",
+        "Lead Paint*" = "StP_PRE1960PCT",
+        "Respiratory Hazard*" = "StP_RESP",
+        "Cancer Hazard*" = "StP_CANCER",
+        "Particulate Matter*" = "StP_PM25",
+        "Diesel Exaust*" = "StP_DSLPM",
+        "Drinking Water Contaminents*" = "StP_DrinkWaterScore") 
+
+effects <- c("Waste Water Discharge Proximity*" = "StP_PWDIS",
+              "Superfund Site Proximity*" = "StP_PNPL",
+              "Hazardous Waste Landfill Proximity*" = "StP_PTSDF",
+              "Risk Managment Plan Facility Proximity*" = "StP_PRMP") 
+
+Allmets <- c("2000 Potential EJ Areas" = "PEJA2000",
+             "Minority (%)" = "StP_MINORPCT",
+            "Low Income (%)" = "StP_LOWINCPCT",
+            "Educational Attainment (%)" = "StP_LESSHSPCT",
+            "Linguistic Isolation (%)" = "StP_LINGISOPCT",
+            "Unemployment (%)" = "StP_PercentUnemployed",
+    "Over 64 (%)" = "StP_OVER64PCT",
+    "Under 5 (%)" = "StP_UNDER5PCT",
+    "Heart Attack*" = "StP_heart_atack",
+    "Asthma*" = "StP_asthma",
+    "Premature Death*" = "StP_premature_death",
+    "Disability (%)" = "StP_PercentDisability",
+    "Preterm Birth*" = "StP_preterm_birth",
+    "Heat Vulnerability*" = "StP_HVIScore",
+    "Homes in Floodplain (%)" = "StP_shr_hu_fp_any",
+    "Traffic Proximity*" = "StP_PTRAF",
+              "Ozone*" = "StP_OZONE",
+              "Lead Paint*" = "StP_PRE1960PCT",
+              "Respiratory Hazard*" = "StP_RESP",
+              "Cancer Hazard*" = "StP_CANCER",
+              "Particulate Matter*" = "StP_PM25",
+              "Diesel Exaust*" = "StP_DSLPM",
+              "Drinking Water Contaminents*" = "StP_DrinkWaterScore",
+    "Waste Water Discharge Proximity*" = "StP_PWDIS",
+             "Superfund Site Proximity*" = "StP_PNPL",
+             "Hazardous Waste Landfill Proximity*" = "StP_PTSDF",
+             "Risk Managment Plan Facility Proximity*" = "StP_PRMP") 
+
+
+# Define UI for application 
 ui <- bootstrapPage(
-    
-    # navbarPage("Power Pollution Costs", id="nav",
-    
-    # tabPanel("Interactive map",
-    #div(class="outer",
-    
-    
+
+    #some css styles
     tags$style(type = "text/css", "html, body {width:100%;height:100%}"),
+    #our backgrounds map
+    leafletOutput("map", width = "60%", height = "60%"),
+    #bottom panel 
+    absolutePanel(id = "eval", 
+                  fixed = TRUE, top = "auto", left = 0, right = "auto", bottom = 0,
+                  width = "60%", height = "40%", style = "opacity: 0.92; overflow-y:scroll", 
+                  fluidPage(fluidRow(
+                      #column(1,h3("Evaluation Metrics")),
+                      column(12,plotlyOutput("localChange3", height = 300, width = 900))))),
     
-    leafletOutput("map", width = "100%", height = "100%"),
+    #right side panel 
     absolutePanel(id = "controls", 
                   fixed = TRUE, top = 0, left = "auto", right = 0, bottom = 0,
-                  width = 700, height = "auto", style = "opacity: 0.82; overflow-y:scroll", 
+                  width = "40%", height = "auto", style = "opacity: 0.92; overflow-y:scroll", 
                   wellPanel( id = "controls",
-                             h2("Covid-19 Mortality and Air Pollution"),
+                             h1("NYenviroScreen"),
+                             h2("A Data Driven Method for Designating NYS Potential Environmental Justice Areas"),
                              p(class = "text-muted",
-                               paste("Mike Petroni, mdpetron@syr.edu, Center for Environmental Medicine and Informatics (CEMI)",
-                                     "at the SUNY College Of Environmental Science and Forestry - TEST APP"
+                               paste("A test application designed by the Center for Environmental Medicine and Informatics (CEMI)",
+                                     "at the SUNY College Of Environmental Science and Forestry"
                                ), 
-                               
-                               # sliderInput("year", "Year", min = 1997, max = 2017, value = 2015, animate = TRUE, sep = "", ticks = FALSE),
-                               selectizeInput("state", "States", x, selected = unique(county_df$State), multiple = TRUE),
-                               # checkboxGroupInput("area", "Region", xx, selected = "Northeast", inline = TRUE),
-                               # sliderInput("thres", "Super Polluter Threshold", min = 75, max = 99, value = 95, ticks = TRUE),
-                               selectInput("var", "Color map points by (plot Y)", y, selected = "nataRespHaz"), 
-                               selectInput("var2", "Size map points by (plot X)", y2, selected = "cov_deaths"), 
-                               checkboxInput("log", "Log x axis?", value = FALSE),
-                               # h3("In-View Graphs"),
-                               # paste("These graphs will ajust to map bounds showing only the data in-view on the map."),
-                               # HTML("<br><br><br>"),
-                               # paste("This graph allows for comparion of in-view plants. The points are sized by total yearly MWh produced."),
-                               # HTML("<br><br>"),
-                               # plotlyOutput("localChange2", height = 300),
-                               # HTML("<br>"),
-                               # paste("This graph examines emissions costs from each Electic Generating Unit (EGU) as thier proportion of total costs."),
-                               # HTML("<br><br>"),
-                               plotlyOutput("localChange3", height = 400)
-                               #,
-                               #          dataTableOutput("table"),
-                               #          
-                               #          h3("Static Graphs"),
-                               #          
-                               #          plotlyOutput("localChange", height = 400),
-                               #          HTML("<br>"),
-                               #          plotlyOutput("localChange4", height = 400),
-                               #          HTML("<br>"),
-                               #          plotlyOutput("localChange5", height = 400),
-                               #          HTML("<br>"),
-                               #          h3("Focus: New York State"),
-                               #          paste("This section focuses in on NYS to examine in-state regional trends, averaged costs per MWh, and future emmssions forcasts. In 2017 NYS
-                               # implemented the Clean Energy Standard (CES). The graphs below show interactive estimates of health costs saving tied ot NOx and SO2 reductions
-                               # in three NYS electric regions"),
-                               #          HTML("<br><br>"),
-                               #          #img(src = "Figure-4-NERC-Interconnections-and-Regions.png", height = 72, width = 72),
-                               #          #HTML("<br>"),
-                               #          sliderInput("int", "Intrest Rate", min = 1, max = 15, value = 5, ticks = TRUE),
-                               #          sliderInput("up", "Up State RE Displacment Percentage", min = 1, max = 50, value = 30, ticks = TRUE),
-                               #          sliderInput("li", "Long Island RE Displacment Percentage", min = 1, max = 50, value = 30, ticks = TRUE),
-                               #          sliderInput("cw", "NYCW RE Displacment Percentage", min = 1, max = 50, value = 30, ticks = TRUE),
-                               #          plotlyOutput("fortot1", height = 400),
-                               #          HTML("<br>"),
-                               #          plotlyOutput("fortot", height = 400),
-                               #          HTML("<br>"),
-                               #          plotlyOutput("forGraphNOx", height = 400),
-                               #          HTML("<br>"),
-                               #          plotlyOutput("forGraphSO2", height = 400),
-                               #          HTML("<br>"),
-                               #          plotlyOutput("localChange6", height = 400),
-                               #          HTML("<br>"),
-                               #          plotlyOutput("localChange7", height = 400),
-                               #          HTML("<br>"),
-                               #          plotlyOutput("localChange8", height = 400),
-                               #          HTML("<br>"),
-                               #          plotlyOutput("localChange9", height = 300),
-                               #          HTML("<br>"),
-                               #          plotlyOutput("localChange10", height = 300),
-                               #          HTML("<br>"),
-                               #          plotlyOutput("localChange11", height = 300),
-                               #          HTML("<br>"),
-                               #          plotlyOutput("localChange12", height = 300),
-                               #          #img(src = "egrid2014_egrid_subregions_0.jpg", height = 72, width = 72)
-                               #          paste("This viewer uses several data sources. Emissions data comes from
-                               #   the EPA AMPD (Air Markets Program Dataset). Marginal emission costs per ton
-                               #   comes from the EASIUR model (Estimating Air pollution Social Impact Using Regression).
-                               #   More information about the AMPD can be found by pasting this link in your browser:
-                               #   https://ampd.epa.gov/ampd/ and more information about EASIUR can be found here: 
-                               #   http://barney.ce.cmu.edu/~jinhyok/easiur/"
-                               #          ) 
-                               
-                               
+                               selectizeInput("Allmets", "Map Environmental Justice Metrics",
+                                              Allmets, selected = "2000 Potential EJ Areas", multiple = FALSE),
+                               # Add links to indicators descriptions, github page, and documentation
+                               h3("Build Your Own Metric"),
+                               #SOCIO
+                               fluidPage(fluidRow(
+                                   column(8,selectizeInput("SocDem", "Sociodemographic Factors",
+                                                           SocDem, selected = unique(SocDem), multiple = TRUE)),
+                                   column(2,selectInput("SocDem_type", "Combination Method", ComboMeth, selected = "Mean", multiple = F)),
+                                   column(2,numericInput("SocDem_Weight", "Weight", 100, min = 1, max = 100, step = 1)))),
+                               fluidPage(fluidRow(
+                                   column(8,selectizeInput("Sensa", "Sensative Population Indicators",
+                                                           Sensa, selected = unique(Sensa), multiple = TRUE)),
+                                   column(2,selectInput("Sensa_type", "Combination Method", ComboMeth, selected = "Mean", multiple = F)),
+                                   column(2,numericInput("Sensa_Weight", "Weight", 100, min = 1, max = 100, step = 1)))),
+                               fluidPage(fluidRow(
+                                   column(8,selectizeInput("exposure", "Environmental Exposures",
+                                                           exposure, selected = unique(exposure), multiple = TRUE)),
+                                   column(2,selectInput("exposure_type", "Combination Method", ComboMeth, selected = "Mean", multiple = F)),
+                                   column(2,numericInput("exposure_Weight", "Weight", 100, min = 1, max = 100, step = 1)))),
+                               fluidPage(fluidRow(
+                                   column(8,selectizeInput("effects", "Environemtnal Effects",
+                                                           effects, selected = unique(effects), multiple = TRUE)),
+                                   column(2,selectInput("effects_type", "Combination Method", ComboMeth, selected = "Mean", multiple = F)),
+                                   column(2,numericInput("effects_Weight", "Weight", 100, min = 1, max = 100, step = 1)))),
+                               fluidPage(fluidRow(
+                                   column(4,numericInput("thres", "Percentile Threshold", 75, min = 1, max = 99, step = 1, width = 100)),
+                                   column(4,checkboxInput("onlyPEJA", "Only Map Areas Over Threshold", FALSE)),
+                                   column(4,actionButton("button_click", "Map Custom Metric"))))
+
                              ))))
 
 server <- function(input, output, session) {
     
+    #we want to do a few things, 
+    #maps the areas, with outlines that indicate if the meet the threshold or not 
+    #make a few charts for income and minority coverage 
     
     
-    filteredtype <- reactive({
-        print(input$var2)
-        dat <- county_df %>% filter(State %in% input$state) %>% select(LAT, LON, County, State,`covid_cases_ X4.15.20`, input$var, input$var2) 
-        print(head(dat))
-        dat <- dat %>% mutate(element = dat[,6],
-                              element2 = dat[,7])
-        print(head(dat))
-        return(dat)
+    Myval <- eventReactive(input$button_click,{
+        
+        if(input$exposure_type == "Mean") {
+            df <- df %>% 
+                mutate(exposure1 = rowMeans(dplyr::select(., exposure),
+                                            na.rm = T)*100)
+        }
+        
+        if(input$exposure_type == "Sum") {
+            df <- df %>%
+                mutate(exposure1 = rowSums(dplyr::select(., input$exposure),
+                                            na.rm = T)*100)
+        }
+        
+        if(input$exposure_type == "Product") {
+            df <- df %>%
+                mutate(exposure1 = rowProds(dplyr::select(., input$exposure),
+                                           na.rm = T)*100)
+        }
+
+        if(input$exposure_type == "Maximum") {
+            df <- df %>%
+                mutate(exposure1 = rowMaxs(dplyr::select(., input$exposure),
+                                            na.rm = T)*100)
+        }
+        
+        df <- df %>%
+            mutate(effects1 = rowMeans(dplyr::select(., input$effects),
+                                      na.rm = T)*100,
+                   Sensitivepops1 = rowMeans(dplyr::select(., input$Sensa),
+                                            na.rm = T)*100,
+                   SocioEcon1 = rowMeans(dplyr::select(.,input$SocDem),
+                                        na.rm = T)*100) %>% ungroup()
+        
+        df$PopChar1 <- ((df$SocioEcon1 + df$Sensitivepops1)/2)
+        df$PolBur1  <- ((df$exposure1 + (df$effects1/2))/1.5)
+        df$PolBurSc1 <- (df$PolBur1/max(df$PolBur1, na.rm = T))*10
+        df$PopCharSc1 <- (df$PopChar1/max(df$PopChar1, na.rm = T))*10
+        
+        df$nyeScore1 <- df$PolBurSc1*df$PopCharSc1
+        df$StP_nyeScore1 <- round(as.numeric(percent_rank(df$nyeScore1)*100),2)
+        
+        return(df)
+        
     })
+    
+    Myval2 <- eventReactive(input$button_click,{
+        df <- df %>%
+            mutate(exposure1 = rowMeans(dplyr::select(., input$exposure),
+                                        na.rm = T)*100,
+                   effects1 = rowMeans(dplyr::select(., input$effects),
+                                       na.rm = T)*100,
+                   Sensitivepops1 = rowMeans(dplyr::select(., input$Sensa),
+                                             na.rm = T)*100,
+                   SocioEcon1 = rowMeans(dplyr::select(.,input$SocDem),
+                                         na.rm = T)*100) %>% ungroup()
+        
+        df$PopChar1 <- ((df$SocioEcon1 + df$Sensitivepops1)/2)
+        df$PolBur1  <- ((df$exposure1 + (df$effects1/2))/1.5)
+        df$PolBurSc1 <- (df$PolBur1/max(df$PolBur1, na.rm = T))*10
+        df$PopCharSc1 <- (df$PopChar1/max(df$PopChar1, na.rm = T))*10
+        
+        df$nyeScore1 <- df$PolBurSc1*df$PopCharSc1
+        
+        df$StP_nyeScore1 <- round(as.numeric(percent_rank(df$nyeScore1)*100),2)
+        dfs <- df %>% dplyr::select(9,38:62) %>%
+            summarise_all(sum) %>% gather("Income Bracket",
+                                          "Total NY House Holds 2018")
+        dfsb <- df %>% filter(StP_nyeScore >= 75) %>% dplyr::select(9,38:62) %>%
+            summarise_all(sum) %>% gather("Income Bracket",
+                                          "NYeviroScreen Coverage")
+        dfsc <- df %>% filter(StP_nyeScore1 >= input$thres) %>% dplyr::select(9,38:62) %>%
+            summarise_all(sum) %>% gather("Income Bracket",
+                                          "Custom Metric Coverage")
+        dfsc1 <- df2k %>% mutate(population = totpop) %>%
+            dplyr::select(51:71, 73,75,76) %>%
+            summarise_all(sum, na.rm =T) %>% gather("Income Bracket",
+                                                    "Total Households or Population 2000")
+        dfsc2 <- df2k %>% filter(peja2k.1 == 1) %>% mutate(population = totpop) %>%
+            dplyr::select(51:71, 73,75,76) %>%
+            summarise_all(sum) %>% gather("Income Bracket",
+                                          "2000 PEJA Coverage")
+        
+        dfs <- left_join(dfs, dfsb)
+        dfs <- left_join(dfs, dfsc)
+        dfs <- left_join(dfs, dfsc1)
+        dfs <- left_join(dfs, dfsc2)
+        
+        
+        return(dfs)
+        
+    })
+    
+    # Myval3 <- eventReactive(input$button_click,{
+    #     
+    #     df <- df %>%
+    #         mutate(exposure1 = rowMeans(dplyr::select(., input$exposure),
+    #                                     na.rm = T)*100,
+    #                effects1 = rowMeans(dplyr::select(., input$effects),
+    #                                    na.rm = T)*100,
+    #                Sensitivepops1 = rowMeans(dplyr::select(., input$Sensa),
+    #                                          na.rm = T)*100,
+    #                SocioEcon1 = rowMeans(dplyr::select(.,input$SocDem),
+    #                                      na.rm = T)*100) %>% ungroup()
+    #     
+    #     df$PopChar1 <- ((df$SocioEcon1 + df$Sensitivepops1)/2)
+    #     df$PolBur1  <- ((df$exposure1 + (df$effects1/2))/1.5)
+    #     df$PolBurSc1 <- (df$PolBur1/max(df$PolBur1, na.rm = T))*10
+    #     df$PopCharSc1 <- (df$PopChar1/max(df$PopChar1, na.rm = T))*10
+    #     
+    #     df$nyeScore1 <- df$PolBurSc1*df$PopCharSc1
+    #     
+    #     df$StP_nyeScore1 <- round(as.numeric(percent_rank(df$nyeScore1)*100),2)
+    #     print(names(df))
+    #     dfs <- df %>% dplyr::select(39:45) %>%
+    #         summarise_all(sum) %>% gather("Income Bracket",
+    #                                       "Total NY House Holds 2018")
+    #     dfsb <- df %>% filter(StP_nyeScore >= 75) %>% dplyr::select(39:45) %>%
+    #         summarise_all(sum) %>% gather("Income Bracket",
+    #                                       "NYeviroScreen Coverage")
+    #     dfsc <- df %>% filter(StP_nyeScore1 >= input$thres) %>% dplyr::select(39:45) %>%
+    #         summarise_all(sum) %>% gather("Income Bracket",
+    #                                       "Custom Metric Coverage")
+    #     
+    #     dfs <- left_join(dfs, dfsb)
+    #     dfs <- left_join(dfs, dfsc)
+    #     
+    #     
+    #     return(dfs)
+    #     
+    # })
     
     
     output$map <- renderLeaflet({ 
-        leaflet() %>% setView(lng = -74.1445, lat = 40.174, zoom = 4)  %>% 
+        leaflet() %>% setView(lng = -75.5445, lat = 42.874, zoom = 7)  %>% 
             addTiles()
     })
     
-    InBounds <- reactive({
-        if (is.null(input$map_bounds))
-            return(us.e.dat[FALSE,])
-        bounds <- input$map_bounds
-        latRng <- range(bounds$north, bounds$south)
-        lngRng <- range(bounds$east, bounds$west)
-        
-        subset(filteredtype(),
-               Facility.Latitude >= latRng[1] & Facility.Latitude <= latRng[2] &
-                   Facility.Longitude >= lngRng[1] & Facility.Longitude <= lngRng[2])
-    })
+    # InBounds <- reactive({
+    #     if (is.null(input$map_bounds))
+    #         return(us.e.dat[FALSE,])
+    #     bounds <- input$map_bounds
+    #     latRng <- range(bounds$north, bounds$south)
+    #     lngRng <- range(bounds$east, bounds$west)
+    #     
+    #     subset(filteredtype(),
+    #            Facility.Latitude >= latRng[1] & Facility.Latitude <= latRng[2] &
+    #                Facility.Longitude >= lngRng[1] & Facility.Longitude <= lngRng[2])
+    # })
     
     # table <- reactive({ renderDataTable(arrange(filteredtype(), desc(filteredtype()$so2Noxcost)), options = NULL, searchDelay = 500,
     #                                     callback = "function(oTable) {}", escape = TRUE, env = parent.frame(),
@@ -176,86 +386,139 @@ server <- function(input, output, session) {
     # })
     # 
     
-    
-    output$localChange3 <- renderPlotly({
-        
-        if(input$log == T){
-            plot_ly(filteredtype(),
-                    type = "scatter", mode = "markers", x = ~log(element2), y = ~element, color = ~State) %>%
-                layout( yaxis = list(title = paste(input$var),
-                                     gridcolor = 'rgb(255, 255, 255)',
-                                     zerolinewidth = 1,
-                                     ticklen = 5,
-                                     gridwidth = 2),
-                        xaxis = list(title =  paste0("Log - ",input$var2),
-                                     gridcolor = 'rgb(255, 255, 255)',
-                                     zerolinewidth = 1,
-                                     ticklen = 5,
-                                     gridwith = 2),
-                        paper_bgcolor = 'rgb(243, 243, 243)',
-                        plot_bgcolor = 'rgb(243, 243, 243)')
-        } else {
-            plot_ly(filteredtype(),
-                    type = "scatter", mode = "markers", x = ~element2, y = ~element, color = ~State) %>%
-                layout( yaxis = list(title = paste(input$var),
-                                     gridcolor = 'rgb(255, 255, 255)',
-                                     zerolinewidth = 1,
-                                     ticklen = 5,
-                                     gridwidth = 2),
-                        xaxis = list(title =  paste(input$var2),
-                                     gridcolor = 'rgb(255, 255, 255)',
-                                     zerolinewidth = 1,
-                                     ticklen = 5,
-                                     gridwith = 2),
-                        paper_bgcolor = 'rgb(243, 243, 243)',
-                        plot_bgcolor = 'rgb(243, 243, 243)')  
+    observe({
+
+        if(input$button_click == F) {
+            #if the custom metric has NOT been intiated    
+        output$localChange3 <- renderPlotly({
+            
+            plot_ly(dfs, type = "bar",
+                    x = ~`Income Bracket`,
+                    y = ~(`NYeviroScreen Coverage`/`Total NY House Holds 2018`)*100,
+                    name = "NYeviroScreen") %>%
+                add_trace(y = ~(`2000 PEJA Coverage`/`Total Households or Population 2000`)*100,
+                          name = "PEJA 2000") %>%
+                layout(xaxis = list(title = 'Percent of Households or Population'), barmode = 'group',
+                       yaxis = list(title = "",
+                                    categoryorder = "array",
+                                    categoryarray = ~`Income Bracket`))
+            
+            
+            
+            
+        })   } else{
+        #if the custom metric has been intiated 
+        output$localChange3 <- renderPlotly({
+            
+            plot_ly(Myval2(), type = "bar",
+                    x = ~`Income Bracket`,
+                    y = ~(`NYeviroScreen Coverage`/`Total NY House Holds 2018`)*100,
+                    name = "NYeviroScreen") %>%
+                add_trace(y = ~(`2000 PEJA Coverage`/`Total Households or Population 2000`)*100,
+                          name = "PEJA 2000") %>%
+                add_trace(y = ~(`Custom Metric Coverage`/`Total NY House Holds 2018`)*100,
+                          name = "Custom Metric") %>%
+                layout(xaxis = list(title = 'Percent of House Holds or Population'), barmode = 'group',
+                       yaxis = list(title = "",
+                                    categoryorder = "array",
+                                    categoryarray = ~`Income Bracket`))
+            
+            
+            
+            
+        })   
         }
+    })
+
+
+    # output$localChange4 <- renderPlotly({
+    #     
+    #     plot_ly(Myval3(), type = "bar",
+    #             y = ~`Income Bracket`,
+    #             x = ~(`NYeviroScreen Coverage`/`Total NY House Holds 2018`)*100,
+    #             name = "NYeviroScreen") %>%
+    #         add_trace(x = ~(`Custom Metric Coverage`/`Total NY House Holds 2018`)*100,
+    #                   name = "Custom Metric") %>%
+    #         layout(xaxis = list(title = 'Percent of Population'), barmode = 'group',
+    #                yaxis = list(title = "",
+    #                             categoryorder = "array",
+    #                             categoryarray = ~`Income Bracket`))
+    #     
+    #     
+    #     
+    #     
+    # })
+    
+    observeEvent(input$Allmets,{
+        print(input$Allmets)
+        if(input$Allmets == "PEJA2000"){
+            leafletProxy("map", data = peja2k.2) %>%
+                clearShapes() %>%
+                clearMarkers() %>%
+                removeControl(layerId = "legend") %>%
+                addPolygons(color = "#444444", weight = .2, smoothFactor = 0.5,
+                            opacity = 1.0, fillOpacity = 0.5,
+                            fillColor = "purple",
+                            highlightOptions = highlightOptions(color = "white", weight = 2,
+                                                                bringToFront = TRUE),
+                            popup = ~paste(GEOID)) %>%                                                                            
+                addLegend("bottomleft", colors = "purple", labels = "2000 PEJA",
+                          title = "2000 Potential Environmental Justice Areas", opacity = 1, layerId = "legend")
+            
+        } else {
         
+        df2 <- df %>% dplyr::select(., GEOID, input$Allmets)
+        names(df2) <- c("GEOID", "myval")
+        ejshp <- merge(ejshp, df2, by = "GEOID", all.x = TRUE)
+
+        pal <-  colorQuantile("viridis",  -ejshp$myval)
         
-        
+        #### size by percent of total? ### might be a solution to the sizing problem...... looks great so far tho! 
+        leafletProxy("map", data = ejshp) %>%
+            clearShapes() %>%
+            clearMarkers() %>%
+            removeControl(layerId = "legend") %>%
+            addPolygons(color = "#444444", weight = .2, smoothFactor = 0.5,
+                        opacity = 1.0, fillOpacity = 0.5,
+                        fillColor = ~colorQuantile("viridis",  -myval)(-myval),
+                        highlightOptions = highlightOptions(color = "white", weight = 2,
+                                                            bringToFront = TRUE),
+                        popup = ~paste(myval)) %>%                                                                            
+            addLegend("bottomleft", pal = pal, values = ejshp$myval,
+                      title = "NYenviroScreen Percentile", opacity = 1, layerId = "legend")
+        }
         
     })
     
-    
-    
-    observe({
+    observeEvent(input$button_click,{
+        df1 <- Myval() 
+        df1 <- df1 %>% dplyr::select(GEOID, StP_nyeScore1)
+        ejshp <- merge(ejshp, df1, by = "GEOID", all.x = TRUE)
+        pal <-  colorQuantile("viridis",  -ejshp$StP_nyeScore)
         
-        value <- input$var
-        pal <- colorBin("YlOrBr", filteredtype()$element, bins =9)
-        if(max(filteredtype()$element2, na.rm =T) > 2) {
-            
-            #### size by percent of total? ### might be a solution to the sizing problem...... looks great so far tho! 
-            leafletProxy("map", data = filteredtype()) %>%
-                clearShapes() %>%
-                clearMarkers() %>%
-                removeControl(layerId = "legend") %>%
-                addCircleMarkers(lng = ~LON, lat = ~LAT, color = "#444444",
-                                 opacity = .1, fillOpacity = 0.4, radius = ~(log(element2)*input$map_zoom)/2,
-                                 fillColor = ~colorBin("YlOrBr", element, bins =9)(element), popup = ~paste0(County, ", ", State, "</br> 4/15 Covid-19 Cases: ",
-                                                                                                             `covid_cases_ X4.15.20`,
-                                                                                                             "</br> Deaths: ",
-                                                                                                             element2,
-                                                                                                             "</br> Pollution: ",
-                                                                                                             element)) %>%
-                addLegend("bottomleft", pal = pal, values = filteredtype()$element,
-                          title = paste(value), opacity = 1, layerId = "legend")
-        } else {
-            leafletProxy("map", data = filteredtype()) %>%
-                clearShapes() %>%
-                clearMarkers() %>%
-                removeControl(layerId = "legend") %>%
-                addCircleMarkers(lng = ~LON, lat = ~LAT, color = "#444444",
-                                 opacity = .1, fillOpacity = 0.4, radius = ~((element2*5)*input$map_zoom),
-                                 fillColor = ~colorBin("YlOrBr", element, bins =9)(element), popup = ~paste0(County, ", ", State, "</br> 4/15 Covid-19 Cases: ",
-                                                                                                             `covid_cases_ X4.15.20`,
-                                                                                                             "</br> Deaths: ",
-                                                                                                             element2,
-                                                                                                             "</br> Pollution: ",
-                                                                                                             element)) %>%
-                addLegend("bottomleft", pal = pal, values = filteredtype()$element,
-                          title = paste(value), opacity = 1, layerId = "legend")  
+        if(input$onlyPEJA == T){
+            ejshp <- ejshp[ejshp$StP_nyeScore1 >= input$thres, ]
         }
         
+        myout <- df1 %>%
+            filter(StP_nyeScore1 > input$thres)
+        
+        # output$population <- sum(myout$population, na.rm = T)
+
+            #### size by percent of total? ### might be a solution to the sizing problem...... looks great so far tho! 
+            leafletProxy("map", data = ejshp) %>%
+                clearShapes() %>%
+                clearMarkers() %>%
+                removeControl(layerId = "legend") %>%
+                addPolygons(color = "#444444", weight = .2, smoothFactor = 0.5,
+                            opacity = 1.0, fillOpacity = 0.5,
+                            fillColor = ~colorQuantile("viridis",  -StP_nyeScore1)(-StP_nyeScore1),
+                            highlightOptions = highlightOptions(color = "white", weight = 2,
+                                                                bringToFront = TRUE),
+                            popup = ~paste(StP_nyeScore1)) %>%                                                                            
+                addLegend("bottomleft", pal = pal, values = ejshp$StP_nyeScore1,
+                          title = "NYenviroScreen Percentile", opacity = 1, layerId = "legend")
+
     })
     
 }

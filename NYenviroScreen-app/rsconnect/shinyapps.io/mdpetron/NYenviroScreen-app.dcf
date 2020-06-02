@@ -1,0 +1,12 @@
+name: NYenviroScreen-app
+title: NYenviroScreen-app
+username:
+account: mdpetron
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2387203
+bundleId: 3212341
+url: https://mdpetron.shinyapps.io/NYenviroScreen-app/
+when: 1590978006.84571
+asMultiple: FALSE
+asStatic: FALSE

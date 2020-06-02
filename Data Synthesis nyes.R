@@ -12,6 +12,10 @@ library(readr)
 library(readxl)
 library(tigris)
 library(tidycensus)
+library(tidyr)
+
+#load API key
+census_api_key("3b7f443116b03bdd7ce2f1ff3f2b117cfff19e69") 
 
 ##### Description
 # NYES is a system like CalEnviroScreen, which combines indicators of population vulnerability 
@@ -65,22 +69,22 @@ NY_health_short <- NY_health %>% filter(Indicator %in% c(
   "Age-adjusted heart attack hospitalization rate per 10,000 population",
   "Percentage of preterm birth",
   "Percentage of premature deaths (before age 65 years)")) %>%
-  group_by(`County Name`, Indicator) %>%
-  filter(`Data Years` == max(`Data Years`, na.rm = T)) %>% ungroup() %>%
+  group_by(`County Name`, Indicator) %>% 
+  filter(`Data Years` == max(`Data Years`, na.rm = T)) %>% ungroup() %>% #take the most recent year
   mutate(Indicator = paste(Indicator, `Data Years`, sep = " - ")) %>%
   select(`County Name`, Indicator, `Percentage/Rate/Ratio`) %>% 
     group_by(`County Name`) %>%
   spread(Indicator, `Percentage/Rate/Ratio`) %>% ungroup()
   
 #county fips 
-
+#downlaod the fips coade for each county to use as a merging field 
 acs2018_ny_county <- get_acs(geography = "county", 
                       state = "NY",
                       variables = c(population = "B01001_001"),
                       year = 2018)
 
 acs2018_ny_county$`County Name` <- sapply(strsplit(acs2018_ny_county$NAME," County"), `[`, 1) 
-
+#join in the fips with the county health data
 countykey <- acs2018_ny_county %>% dplyr::select(`County Name`, GEOID)
 NY_health_short <- left_join(NY_health_short, countykey)
 
@@ -100,7 +104,7 @@ Food_insecure_ny <- Food_insecure %>% filter(State == "New York")
 NY_drink <- read_csv("https://apps.health.ny.gov/statistics/environmental/public_health_tracking/tracker/files/water/drinking_water.csv")
 #create a county average (blunt but all we can do right now)
 
-NY_drink <- left_join(NY_Drink, countykey, by = c("PRIN_CNTY" = "County Name"))
+NY_drink <- left_join(NY_drink, countykey, by = c("PRIN_CNTY" = "County Name"))
 
 #take the most recent year... 2009? 
 NY_drink_09 <- NY_drink %>% filter(YEAR == 2009)
@@ -170,15 +174,21 @@ NY_drink_09_P <- NY_drink_09 %>%
 ##
 ## Source: https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html 
 nyblock_groups <- block_groups(state = "NY", cb = T)
+library(rmapshaper)
+library(maptools)
+library(gpclib)
+gpclibPermit()
+gpclibPermitStatus()
+nyblock_groups <- ms_simplify(nyblock_groups)
 nyblock_groups_2000 <- block_groups(state = "NY", cb = T, year = 2000)
 
 ##
 # Census data from 2000 and 2018 for comparison with CP-29 PEJAs
 ##
-census_api_key("3b7f443116b03bdd7ce2f1ff3f2b117cfff19e69") 
+
 # investigate the data you may need
-# v00 <- load_variables(2000, "sf3")
-# v01 <- load_variables(2000, "sf1")
+v00 <- load_variables(2000, "sf3")
+ v01 <- load_variables(2000, "sf1")
 # mine <- v01 %>% filter(name == "P001001")
 # 
 # write.csv(v00, "census2000vars.csv")
@@ -220,16 +230,41 @@ acs2018_ny <- get_acs(geography = "block group",
 
 acs2018_ny1 <- acs2018_ny %>% dplyr::select(-moe) %>% spread(variable, estimate) %>% distinct()
 
-#these poverty variables do not work.... 
-
+#Census 2000
+#https://api.census.gov/data/2000/sf3/variables.html
 dc2000_ny <- get_decennial(geography = "block group", 
               state = "NY", year = 2000,
               variables = c(
                 #White_total = "P012A001",
-                white_alone_sf3 = "P145A001",
+                white_alone = "P145A001",
+                black_alone = "P145B001",
+                Native_American = "P145C001",
+                Asian_alone = "P145D001",
+                other_alone = "P145F001",
+                two_or_more = "P145G001",
                 under_poverty = "P087002",
-                total_pop = "P001001"
-              ))
+                total_pop = "P001001",
+                Households = "P052001",
+                inc_lessthan10k = "P052002",
+                inc_10to15 = "P052003",
+                inc_15to20 = "P052004",
+                inc_20to25 = "P052005",
+                inc_25to30 = "P052006",
+                inc_30to35 = "P052007",
+                inc_35to40 = "P052008",
+                inc_40to45 = "P052009",
+                inc_45to50 = "P052010",
+                inc_50to60 = "P052011",
+                inc_60to75 = "P052012",
+                inc_75to100 = "P052013",
+                inc_100to125 = "P052014",
+                inc_125to150 = "P052015",
+                inc_150to200 = "P052016",
+                inc_200plus = "P052017")
+              )
+names(dc2000_ny)
+dc2000_ny1 <- dc2000_ny %>% dplyr::select(-NAME) %>% group_by(GEOID) %>%
+  spread(variable, value) %>% distinct() %>% ungroup()
 
 # from the old script
 ################ 2000 ######################
@@ -267,6 +302,8 @@ nyblock_groups_2000$GEOID <- paste0(nyblock_groups_2000$STATE, nyblock_groups_20
 
 ej2k <- merge(nyblock_groups_2000, ejb, by.x = "GEOID", by.y = "geo.id3", all.x = TRUE)
 ej2k$peja2k.1 <- ifelse(ej2k$urb2k == 0 & ej2k$raceper2k > .296 | ej2k$urb2k == 1 & ej2k$raceper2k > .466 | ej2k$povper2k >= .2310, 1, 0)
+
+ej2k <- merge(ej2k, dc2000_ny1, by = "GEOID")
 peja2k.2 <- subset(ej2k, ej2k$peja2k.1 == 1)
 
 #did it work?

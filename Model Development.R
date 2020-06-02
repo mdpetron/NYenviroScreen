@@ -78,71 +78,68 @@ df <- ny_enviro_screen_data %>%
 
 #get state rank for the sociodemogrpahic indicators 
 df <- df %>% 
-  mutate(StP_MINORPCT = percent_rank(MINORPCT),
-         StP_LOWINCPCT = percent_rank(LOWINCPCT),
-         StP_LESSHSPCT = percent_rank(LESSHSPCT),
-         StP_PRE1960PCT = percent_rank(PRE1960PCT),
-         StP_LINGISOPCT = percent_rank(LINGISOPCT),
-         StP_UNDER5PCT = percent_rank(UNDER5PCT),
-         StP_OVER64PCT = percent_rank(OVER64PCT),
-         StP_PercentDisability = percent_rank(PercentDisability),
-         StP_PercentUnemployed = percent_rank(PercentUnemployed),
-         StP_heart_atack = percent_rank(`Age-adjusted heart attack hospitalization rate per 10,000 population - 2014`),
-         StP_asthma = percent_rank(`Asthma emergency department visit rate per 10,000 population - 2014`),
-         StP_premature_death = percent_rank(`Percentage of premature deaths (before age 65 years) - 2016`),
-         StP_preterm_birth = percent_rank(`Percentage of preterm birth - 2016`),
-         StP_OZONE = percent_rank(OZONE),
-         StP_PM25 = percent_rank(PM25),
-         StP_RESP = percent_rank(RESP),
-         StP_PTRAF = percent_rank(PTRAF),
-         StP_CANCER = percent_rank(CANCER),
-         StP_DrinkWaterScore = percent_rank(DrinkWaterScore),
-         StP_PWDIS = percent_rank(PWDIS),
-         StP_PNPL = percent_rank(PNPL),
-         StP_PRMP = percent_rank(PRMP),
-         StP_PTSDF = percent_rank(PTSDF),
-         StP_PRE1960PCT = percent_rank(PRE1960PCT),
-         StP_HVIScore = percent_rank(HVIScore),
-         StP_shr_hu_fp_any = percent_rank(shr_hu_fp_any))
+  mutate(StP_MINORPCT = as.numeric(percent_rank(MINORPCT)),
+         StP_LOWINCPCT = as.numeric(percent_rank(LOWINCPCT)),
+         StP_LESSHSPCT = as.numeric(percent_rank(LESSHSPCT)),
+         StP_PRE1960PCT = as.numeric(percent_rank(PRE1960PCT)),
+         StP_LINGISOPCT = as.numeric(percent_rank(LINGISOPCT)),
+         StP_UNDER5PCT = as.numeric(percent_rank(UNDER5PCT)),
+         StP_OVER64PCT = as.numeric(percent_rank(OVER64PCT)),
+         StP_PercentDisability = as.numeric(percent_rank(PercentDisability)),
+         StP_PercentUnemployed = as.numeric(percent_rank(PercentUnemployed)),
+         StP_heart_atack = as.numeric(percent_rank(`Age-adjusted heart attack hospitalization rate per 10,000 population - 2014`)),
+         StP_asthma = as.numeric(percent_rank(`Asthma emergency department visit rate per 10,000 population - 2014`)),
+         StP_premature_death = as.numeric(percent_rank(`Percentage of premature deaths (before age 65 years) - 2016`)),
+         StP_preterm_birth = as.numeric(percent_rank(`Percentage of preterm birth - 2016`)),
+         StP_OZONE = as.numeric(percent_rank(OZONE)),
+         StP_PM25 = as.numeric(percent_rank(PM25)),
+         StP_RESP = as.numeric(percent_rank(RESP)),
+         StP_PTRAF = as.numeric(percent_rank(PTRAF)),
+         StP_CANCER = as.numeric(percent_rank(CANCER)),
+         StP_DSLPM = as.numeric(percent_rank(DSLPM)),
+         StP_DrinkWaterScore = as.numeric(percent_rank(DrinkWaterScore)),
+         StP_PWDIS = as.numeric(percent_rank(PWDIS)),
+         StP_PNPL = as.numeric(percent_rank(PNPL)),
+         StP_PRMP = as.numeric(percent_rank(PRMP)),
+         StP_PTSDF = as.numeric(percent_rank(PTSDF)),
+         StP_PRE1960PCT = as.numeric(percent_rank(PRE1960PCT)),
+         StP_HVIScore = as.numeric(percent_rank(HVIScore)),
+         StP_shr_hu_fp_any = as.numeric(percent_rank(shr_hu_fp_any)))
 
-
+str(df)
 #Setup the default model groupings
 
-df <- df %>% group_by(ID) %>% 
-  mutate(exposure = mean(as.numeric(StP_PTRAF),
-                         as.numeric(StP_OZONE),
-                         as.numeric(StP_PRE1960PCT), 
-                         as.numeric(StP_RESP),
-                         as.numeric(StP_CANCER),
-                         as.numeric(StP_PM25),
-                         as.numeric(StP_DSLPM),
-                         as.numeric(StP_DrinkWaterScore),
-                         SP_TC, na.rm = T)*100,
-         
-         effects = mean(as.numeric(StP_PWDIS),
-                        as.numeric(StP_PNPL),
-                        as.numeric(StP_PTSDF),
-                        as.numeric(StP_PRMP),
-                        na.rm = T)*100,
-         
-         Sensitivepops = mean(as.numeric(StP_UNDER5PCT),
-                              as.numeric(StP_OVER64PCT),
-                              as.numeric(StP_heart_atack),
-                              as.numeric(StP_asthma),
-                              as.numeric(StP_premature_death),
-                              as.numeric(StP_PercentDisability),
-                              as.numeric(StP_preterm_birth),
-                              as.numeric(StP_HVIScore),
-                              as.numeric(StP_shr_hu_fp_any),
-                              na.rm = T)*100,
-         
-         SocioEcon = mean(as.numeric(StP_LOWINCPCT),
-                          as.numeric(StP_LESSHSPCT),
-                          as.numeric(StP_LINGISOPCT),
-                          as.numeric(StP_PercentUnemployed),
-                          as.numeric(StP_MINORPCT),
-                          na.rm = T)*100) %>% ungroup()
-
+df <- df %>%
+  mutate(exposure = rowMeans(dplyr::select(., StP_PTRAF,
+                                    StP_OZONE,
+                                    StP_PRE1960PCT,
+                                    StP_RESP,
+                                    StP_CANCER,
+                                    StP_PM25,
+                                    StP_DSLPM,
+                                    StP_DrinkWaterScore),
+                             na.rm = T)*100,
+         effects = rowMeans(dplyr::select(., StP_PWDIS,
+                                          StP_PNPL,
+                                          StP_PTSDF,
+                                          StP_PRMP),
+                             na.rm = T)*100,
+         Sensitivepops = rowMeans(dplyr::select(., StP_UNDER5PCT,
+                                                StP_OVER64PCT,
+                                                StP_heart_atack,
+                                                StP_asthma,
+                                                StP_premature_death,
+                                                StP_PercentDisability,
+                                                StP_preterm_birth,
+                                                StP_HVIScore,
+                                                StP_shr_hu_fp_any),
+                            na.rm = T)*100,
+         SocioEcon = rowMeans(dplyr::select(.,StP_LOWINCPCT,
+                                     StP_LESSHSPCT,
+                                     StP_LINGISOPCT,
+                                     StP_PercentUnemployed,
+                                     StP_MINORPCT),
+                                     na.rm = T)*100) %>% ungroup()
 
 
 df$PopChar <- ((df$SocioEcon + df$Sensitivepops)/2)
@@ -152,8 +149,29 @@ df$PopCharSc <- (df$PopChar/max(df$PopChar, na.rm = T))*10
 
 df$nyeScore <- df$PolBurSc*df$PopCharSc
 
-df$nyeScore_SP <- percent_rank(df$nyeScore)*10
+df$StP_nyeScore <- round(as.numeric(percent_rank(df$nyeScore)*100),2)
 
+#now lets map this shit 
+names(nyblock_groups)
+ejshp <- merge(nyblock_groups, df, by.x = "GEOID", by.y = "ID", all.x = TRUE)
+
+
+leaflet(ejshp) %>%
+  addTiles() %>%
+  addPolygons(color = "#444444", weight = .2, smoothFactor = 0.5,
+              opacity = 1.0, fillOpacity = 0.5,
+              fillColor = ~colorQuantile("viridis",  -StP_nyeScore)(-StP_nyeScore),
+              highlightOptions = highlightOptions(color = "white", weight = 2,
+                                                  bringToFront = TRUE),
+              popup = ~paste(StP_nyeScore))
+
+#sweet
+ejshp$PEJA2000 <- ifelse(ejshp$GEOID %in% ejb$geo.id3, 1, 0)
+write_rds(ejshp, "C:/Users/Mike Petroni/Documents/GitHub/NYenviroScreen/NYenviroScreen-app/www/ejshp_053020.rds")
+write_rds(ej2k, "C:/Users/Mike Petroni/Documents/GitHub/NYenviroScreen/NYenviroScreen-app/www/peja2k_053020.rds")
+
+
+?percent_rank
 df1 <- df %>% select(blockG, 194:226)
 
 #reload old BlockG
@@ -166,3 +184,12 @@ blockG$PolBur <- df1$PolBur
 PEJA2017 <- blockG %>% filter(nyeScore_SP >= 7.5)
 
 write_rds(PEJA2017, "C:/Users/Mike Petroni/Documents/TRI Local/PEJA2017_6_8_18.rds")###
+
+
+
+
+
+
+
+
+
