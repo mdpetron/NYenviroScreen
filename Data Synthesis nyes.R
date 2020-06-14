@@ -13,6 +13,8 @@ library(readxl)
 library(tigris)
 library(tidycensus)
 library(tidyr)
+library(tidyverse)
+
 
 #load API key
 census_api_key("3b7f443116b03bdd7ce2f1ff3f2b117cfff19e69") 
@@ -44,10 +46,10 @@ flood_risk_ny <- read_excel("data/NY-FloodzoneData-Download.xlsx",
 # unzip("data/EJSCREEN_2019_USPR.csv.zip", exdir="./data")
 # grab EJscreen
 ejScreen <- read_csv("data/EJSCREEN_2019_USPR.csv")
-names(ejScreen)
+#names(ejScreen)
 #subset to NY
 ejScreenNY <- ejScreen %>% filter(ST_ABBREV == "NY")
-
+rm(ejScreen)
 ##
 # NYS Heat Vulnerability Index Data
 ##
@@ -75,6 +77,7 @@ NY_health_short <- NY_health %>% filter(Indicator %in% c(
   select(`County Name`, Indicator, `Percentage/Rate/Ratio`) %>% 
     group_by(`County Name`) %>%
   spread(Indicator, `Percentage/Rate/Ratio`) %>% ungroup()
+
   
 #county fips 
 #downlaod the fips coade for each county to use as a merging field 
@@ -88,6 +91,25 @@ acs2018_ny_county$`County Name` <- sapply(strsplit(acs2018_ny_county$NAME," Coun
 countykey <- acs2018_ny_county %>% dplyr::select(`County Name`, GEOID)
 NY_health_short <- left_join(NY_health_short, countykey)
 
+
+#### cancer
+# download.file("https://health.data.ny.gov/download/y4pv-ib8r/application%2Fzip",
+#               destfile = "data/cancer11_15.zip", mode="wb")
+# unzip("data/cancer11_15.zip", exdir = "./data")
+
+# difference from expected total cancer incidence 2011-2015
+can_inc <-  read_excel("data/NYSDOH_CancerMapping_Data_2011_2015.xlsx")
+crosswalk <-  read_excel("data/NYSDOH_CancerMapping_Crosswalk_2011_2015.xlsx")
+can_inc_sh <- can_inc %>%
+  mutate(dif_from_expected_total = expected_Total - observed_Total) %>%
+  mutate(StP_DifExpectedTotal = percent_rank(dif_from_expected_total)) %>%
+    dplyr::select(dif_from_expected_total, StP_DifExpectedTotal, Dohregion)
+
+#join with cross walk - we are assuming that bgs in the same dohregion have the same dif expected tot
+can_inc_sh <- left_join(crosswalk, can_inc_sh, by = c("dohregion" = "Dohregion"))
+can_inc_sh <- can_inc_sh %>% select(-dohregion) %>% distinct()
+  
+
 ### https://studentwork.prattsi.org/infovis/visualization/food-desert-new-york-state-2010-census-demographics/
 
 # USDA tract level food deserts 2015
@@ -95,7 +117,9 @@ NY_health_short <- left_join(NY_health_short, countykey)
 #                destfile = "data/DataDownload2015.xlsx", mode="wb")
 Food_insecure <- read_excel("data/DataDownload2015.xlsx",
                             sheet = 3) 
-Food_insecure_ny <- Food_insecure %>% filter(State == "New York")
+Food_insecure_ny <- Food_insecure %>% filter(State == "New York") %>% 
+  dplyr::select(CensusTract, LILATracts_1And10)
+
 #this does not have all of our tracts 
 
 # Drinking water
@@ -173,14 +197,74 @@ NY_drink_09_P <- NY_drink_09 %>%
 # Census shapfiles
 ##
 ## Source: https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html 
-nyblock_groups <- block_groups(state = "NY", cb = T)
-library(rmapshaper)
-library(maptools)
-library(gpclib)
-gpclibPermit()
-gpclibPermitStatus()
-nyblock_groups <- ms_simplify(nyblock_groups)
+nyblock_groups <- block_groups(state = "NY")
 nyblock_groups_2000 <- block_groups(state = "NY", cb = T, year = 2000)
+
+#grab the Urban Clusters and the Native American Blockgroups 
+urb_zones <- urban_areas()
+tribe_areas <- native_areas()
+
+#convert to sf object
+library(sf)
+
+
+urb_zones_sf <- st_as_sf(urb_zones)
+nyblock_groups_sf <- st_as_sf(nyblock_groups)
+tribe_areas_sf <- st_as_sf(tribe_areas)
+# ok lets do an intersection to get the percentage of urban area and native area for each ny bg
+# Check the projection
+# st_crs(urb_zones_sf)
+# st_crs(nyblock_groups_sf)
+
+int <- st_intersection(nyblock_groups_sf, urb_zones_sf)
+int2 <- st_as_sf(int)
+attArea <- int2 %>% 
+  mutate(area = st_area(.) %>% as.numeric())
+attArea$amount_in_Urban <- attArea$area/(as.numeric(attArea$ALAND) + as.numeric(attArea$AWATER))
+#tribes interstion and area percentages
+int_tribe <- st_intersection(nyblock_groups_sf, tribe_areas_sf)
+int_tribe <- st_as_sf(int_tribe)
+
+attArea_tribe <- int_tribe %>% 
+  mutate(area = st_area(.) %>% as.numeric())
+attArea_tribe$amount_in_Tribe <- attArea_tribe$area/(as.numeric(attArea_tribe$ALAND) + as.numeric(attArea_tribe$AWATER))
+
+# make sure that the SF intersection process works 
+# test <- attArea %>% filter(GEOID == 360039505001)
+# testT <- tribe_areas_sf %>% filter(GEOID == "2535R")
+# testBG <- nyblock_groups_sf %>% filter(GEOID == 360039505001)
+# tstinter <- int_tribe %>% filter(GEOID == 360039505001)
+#  library(leaflet)
+# tst_BG_sp %>%
+#   leaflet() %>%
+#   addTiles() %>%
+#   addPolygons(fill = "blue")
+
+#now lets merge our indictors back into the dataset 
+
+tribes <- as.data.frame(attArea_tribe)
+tribes <- tribes %>% mutate(Tribal_Area = ifelse(amount_in_Tribe > 0, 1, 0),
+                            Tribal_Area_or_Border = ifelse(!is.na(amount_in_Tribe), 1, 0)) %>%
+  dplyr::select(GEOID, NAMELSAD.1, amount_in_Tribe, Tribal_Area, Tribal_Area_or_Border)
+
+Urban <- as.data.frame(attArea)
+Urban <- Urban %>% group_by(GEOID) %>%
+  summarise(amount_in_Urban = sum(amount_in_Urban, na.rm = T)) %>% ungroup() %>%
+  mutate(Urban_Area_50per = ifelse(amount_in_Urban > 0.5, 1, 0)) %>%
+  dplyr::select(GEOID, amount_in_Urban, Urban_Area_50per)
+
+
+#simplify boundaries for better app performance
+library(rmapshaper)
+# library(maptools)
+# library(gpclib)
+# library(lwgeom)
+# library(sp)
+# library(rgeos)
+# library(raster)
+
+
+nyblock_groups_simp <- ms_simplify(nyblock_groups)
 
 ##
 # Census data from 2000 and 2018 for comparison with CP-29 PEJAs
@@ -189,6 +273,9 @@ nyblock_groups_2000 <- block_groups(state = "NY", cb = T, year = 2000)
 # investigate the data you may need
 v00 <- load_variables(2000, "sf3")
  v01 <- load_variables(2000, "sf1")
+ v02 <- load_variables(2018, dataset = "acs5")
+ 
+ rent <- v02 %>% filter(grepl("Income in the past 12 months below poverty level", label))
 # mine <- v01 %>% filter(name == "P001001")
 # 
 # write.csv(v00, "census2000vars.csv")
@@ -200,6 +287,7 @@ v00 <- load_variables(2000, "sf3")
 acs2018_ny <- get_acs(geography = "block group", 
         state = "NY",
         variables = c(medincome = "B19013_001",
+                      rentasPercageofIncome = "B25071_001",
                       population = "B01003_001",
                       white_alone = "B02001_002",
                       black_alone = "B02001_003",
@@ -229,6 +317,15 @@ acs2018_ny <- get_acs(geography = "block group",
         year = 2018) 
 
 acs2018_ny1 <- acs2018_ny %>% dplyr::select(-moe) %>% spread(variable, estimate) %>% distinct()
+
+#for income, need to use the tracts
+acs2018_ny_tract <- get_acs(geography = "tract", 
+                      state = "NY",
+                      variables = c(population = "B01003_001",
+                                    below_fed_poverty_level = "B17001_002"),
+                      year = 2018) 
+
+acs2018_ny_tract <- acs2018_ny_tract %>% dplyr::select(-moe) %>% spread(variable, estimate) %>% distinct()
 
 #Census 2000
 #https://api.census.gov/data/2000/sf3/variables.html
@@ -268,53 +365,37 @@ dc2000_ny1 <- dc2000_ny %>% dplyr::select(-NAME) %>% group_by(GEOID) %>%
 
 # from the old script
 ################ 2000 ######################
-# Poverty
-pov2000 <- read.csv("data/DEC_00_SF3_P087_with_annincome.csv", stringsAsFactors = TRUE, header = TRUE)
-medinc2000 <- read.csv("data/DEC_00_SF3_P053_with_ann_medain_income.csv", stringsAsFactors = TRUE, header = TRUE)
-# Race
-race2000 <- read.csv("data/redistricting race 2000.csv", stringsAsFactors = TRUE, header = TRUE)
-race2000 <- race2000[complete.cases(race2000), ]
-race2000$totpop <- ave(race2000$P0010001, race2000$GEOID,  FUN = function(x) sum(x, na.rm = T))
-race2000$totwhite <- ave(race2000$P0020005, race2000$GEOID,  FUN = function(x) sum(x, na.rm = T))
-my.cols <- c("GEOID", "totpop", "totwhite")
-race2000 <- race2000[my.cols]
-race2000 <- unique(race2000)
-race2000$raceper2k <- ((race2000$totpop - race2000$totwhite)/race2000$totpop)
-#Urb/rur
-urb.rur2000 <- read.csv("data/2000urb_rur.csv", stringsAsFactors = TRUE, header = TRUE)
-#2000 poverty percentage per block group
-pov2000$povper2k <- pov2000$VD02/pov2000$VD01
-#2000 urb/rural (MY!!!!) decsion rule for urban, over 50% urban 
-urb.rur2000$perUrb2k <- (urb.rur2000$VD02/urb.rur2000$VD01)
-urb.rur2000$urb2k <- ifelse(urb.rur2000$perUrb2k > .5, 1, 0)
-urb.rur2000$GEO.id <- as.character(urb.rur2000$GEO.id)
-urb.rur2000$geo.id3 <- sapply(strsplit(urb.rur2000$GEO.id, split = 'S', fixed = TRUE), function(x) (x[2]))
-urb.rur2000$geo.id3 <- as.numeric(urb.rur2000$geo.id3)
+#can we take this directly from the DEC?
+#here is how this works, go to DEC website - https://www.dec.ny.gov/public/911.html
+#download the kmz layer in google earth, open it in google earth, then save it as a kml
+#get the layers
+layers_peja <- st_layers("data/KML/Potential Environmental Justice Areas2.kml")
+#read in each layer
+read_kml <- function(layer1) {
+  peja2k <- sf::st_read("data/KML/Potential Environmental Justice Areas2.kml",
+                        layer = layers_peja$name[layer1]) 
+  return(peja2k)
+}
 
-eja <- merge(pov2000, urb.rur2000, by = "GEO.id")
-ejb <- merge(eja, medinc2000, by = "GEO.id")
-ejb$GEO.id <- as.character(ejb$GEO.id)
-ejb$geo.id3 <- sapply(strsplit(ejb$GEO.id, split = 'S', fixed = TRUE), function(x) (x[2]))
-ejb <- merge(ejb, race2000, by.x = "geo.id3", by.y = "GEOID")
+kmllist <- lapply(1:length(layers_peja$name), function (x)  read_kml(x))
+kmllist1 <- kmllist[[1]]
+for (i in 2:length(kmllist)) kmllist1 <- bind_rows(kmllist1, kmllist[[i]])
+
+
 #merge with shapefiles
 nyblock_groups_2000$GEOID <- paste0(nyblock_groups_2000$STATE, nyblock_groups_2000$COUNTY,
                                     nyblock_groups_2000$TRACT, nyblock_groups_2000$BLKGROUP)
 
-ej2k <- merge(nyblock_groups_2000, ejb, by.x = "GEOID", by.y = "geo.id3", all.x = TRUE)
-ej2k$peja2k.1 <- ifelse(ej2k$urb2k == 0 & ej2k$raceper2k > .296 | ej2k$urb2k == 1 & ej2k$raceper2k > .466 | ej2k$povper2k >= .2310, 1, 0)
+nyblock_groups_2000$peja2k.1 <- ifelse(nyblock_groups_2000$GEOID %in% kmllist1$Name, 1, 0)
 
-ej2k <- merge(ej2k, dc2000_ny1, by = "GEOID")
+ej2k <- merge(nyblock_groups_2000, dc2000_ny1, by = "GEOID")
 peja2k.2 <- subset(ej2k, ej2k$peja2k.1 == 1)
 
-#did it work?
-
-peja2k.2 %>%
-  leaflet() %>%
-  addTiles() %>%
-  addPolygons(fill = "blue")
-
-#sorta - need to see why we are getting more bgs than the DEC
-
+# did it work? - map it
+# peja2k.2 %>%
+#   leaflet() %>%
+#   addTiles() %>%
+#   addPolygons(fill = "blue")
 
 ## combine data sets 
 ##blocks
@@ -353,9 +434,30 @@ acs2018_ny1$GEOID <- NULL
 mydf6 <- left_join(mydf5, acs2018_ny1)
 
 
+#food access
+names(Food_insecure_ny)
+mydf7 <- left_join(mydf6, Food_insecure_ny, by = c("CensusTractID" = "CensusTract"))
+
+#cancer incidence
+names(can_inc_sh)
+can_inc_sh$geoid10 <- as.character(can_inc_sh$geoid10)
+mydf8 <- left_join(mydf7, can_inc_sh, by = c("ID" = "geoid10"))
+
+#urban zones
+mydf9 <- left_join(mydf8, Urban, by = c("ID" = "GEOID"))
+
+#tribe areas
+mydf10 <- left_join(mydf9, tribes, by = c("ID" = "GEOID"))
+
+#ACS Poverty
+acs2018_ny_tract <- acs2018_ny_tract %>% group_by(GEOID) %>%
+summarise(per_poverty = below_fed_poverty_level/population) %>% ungroup()
+mydf11 <- left_join(mydf10, acs2018_ny_tract, by = c("CensusTractID" = "GEOID"))
+
+
 #holy shit 500 variables!!
 
-ny_enviro_screen_data <- mydf6
+ny_enviro_screen_data <- mydf11
 
 
 

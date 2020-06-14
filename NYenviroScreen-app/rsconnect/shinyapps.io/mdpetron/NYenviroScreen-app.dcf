@@ -5,8 +5,9 @@ account: mdpetron
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 2387203
-bundleId: 3212341
+bundleId: 3233698
 url: https://mdpetron.shinyapps.io/NYenviroScreen-app/
-when: 1590978006.84571
+when: 1591380229.8734
 asMultiple: FALSE
 asStatic: FALSE
+ignoredFiles: interim_tribe_intersection.rds|interim_urban_intersection.rds

@@ -6,7 +6,7 @@
 #
 #    http://shiny.rstudio.com/
 #
-# setwd("C:/Users/Mike Petroni/Documents/GitHub/NYenviroScreen/NYenviroScreen-app")
+ setwd("C:/Users/Mike Petroni/Documents/GitHub/NYenviroScreen/NYenviroScreen-app")
 
 library(shiny)
 library(leaflet)
@@ -102,7 +102,7 @@ dfs <- left_join(dfs, dfsb)
 dfs <- left_join(dfs, dfsc)
 dfs <- left_join(dfs, dfsc1)
 
-ComboMeth <- c("Mean", "Sum", "Product", "Maximum")
+ComboMeth <- c("Mean", "Sum", "Maximum")
 
 #list for the selection 
 SocDem <- c("Minority (%)" = "StP_MINORPCT",
@@ -231,43 +231,89 @@ server <- function(input, output, session) {
     
     
     Myval <- eventReactive(input$button_click,{
-        
+        #exposure
         if(input$exposure_type == "Mean") {
             df <- df %>% 
-                mutate(exposure1 = rowMeans(dplyr::select(., exposure),
-                                            na.rm = T)*100)
-        }
-        
+                mutate(exposure1 = rowMeans(dplyr::select(., input$exposure),
+                                            na.rm = T)*100)}
         if(input$exposure_type == "Sum") {
             df <- df %>%
                 mutate(exposure1 = rowSums(dplyr::select(., input$exposure),
-                                            na.rm = T)*100)
-        }
-        
+                                            na.rm = T)*100)}
         if(input$exposure_type == "Product") {
             df <- df %>%
                 mutate(exposure1 = rowProds(dplyr::select(., input$exposure),
-                                           na.rm = T)*100)
-        }
-
+                                           na.rm = T)*100)}
         if(input$exposure_type == "Maximum") {
             df <- df %>%
                 mutate(exposure1 = rowMaxs(dplyr::select(., input$exposure),
-                                            na.rm = T)*100)
-        }
+                                            na.rm = T)*100)}
+        #SocDem
+        if(input$SocDem_type == "Mean") {
+            df <- df %>% 
+                mutate(SocioEcon1 = rowMeans(dplyr::select(., input$SocDem),
+                                            na.rm = T)*100)}
+        if(input$SocDem_type == "Sum") {
+            df <- df %>%
+                mutate(SocioEcon1 = rowSums(dplyr::select(., input$SocDem),
+                                           na.rm = T)*100)}
+        if(input$SocDem_type == "Product") {
+            df <- df %>%
+                mutate(SocioEcon1 = rowProds(dplyr::select(., input$SocDem),
+                                            na.rm = T)*100)}
+        if(input$SocDem_type == "Maximum") {
+            df <- df %>%
+                mutate(SocioEcon1 = rowMaxs(dplyr::select(., input$SocDem),
+                                           na.rm = T)*100)}
+        #Sensitivepops
+        if(input$Sensa_type == "Mean") {
+            df <- df %>% 
+                mutate(Sensitivepops1 = rowMeans(dplyr::select(., input$Sensa),
+                                             na.rm = T)*100)}
+        if(input$Sensa_type == "Sum") {
+            df <- df %>%
+                mutate(Sensitivepops1 = rowSums(dplyr::select(., input$Sensa),
+                                            na.rm = T)*100)}
+        if(input$Sensa_type == "Product") {
+            df <- df %>%
+                mutate(Sensitivepops1 = rowProds(dplyr::select(., input$Sensa),
+                                             na.rm = T)*100)}
+        if(input$Sensa_type == "Maximum") {
+            df <- df %>%
+                mutate(Sensitivepops1 = rowMaxs(dplyr::select(., input$Sensa),
+                                            na.rm = T)*100)}
+        #SocDem
+        if(input$effects_type == "Mean") {
+            df <- df %>% 
+                mutate(effects1 = rowMeans(dplyr::select(., input$effects),
+                                             na.rm = T)*100)}
+        if(input$effects_type == "Sum") {
+            df <- df %>%
+                mutate(effects1 = rowSums(dplyr::select(., input$effects),
+                                            na.rm = T)*100)}
+        if(input$effects_type == "Product") {
+            df <- df %>%
+                mutate(effects1 = rowProds(dplyr::select(., input$effects),
+                                             na.rm = T)*100)}
+        if(input$effects_type == "Maximum") {
+            df <- df %>%
+                mutate(effects1 = rowMaxs(dplyr::select(., input$effects),
+                                            na.rm = T)*100)}
+
         
-        df <- df %>%
-            mutate(effects1 = rowMeans(dplyr::select(., input$effects),
-                                      na.rm = T)*100,
-                   Sensitivepops1 = rowMeans(dplyr::select(., input$Sensa),
-                                            na.rm = T)*100,
-                   SocioEcon1 = rowMeans(dplyr::select(.,input$SocDem),
-                                        na.rm = T)*100) %>% ungroup()
-        
-        df$PopChar1 <- ((df$SocioEcon1 + df$Sensitivepops1)/2)
-        df$PolBur1  <- ((df$exposure1 + (df$effects1/2))/1.5)
+        df$PopChar1 <- ((df$SocioEcon1*(input$SocDem_Weight/100) + df$Sensitivepops1*(input$Sensa_Weight/100))/((input$SocDem_Weight + input$Sensa_Weight)/100))
+        df$PolBur1  <- ((df$exposure1*(input$exposure_Weight/100) + (df$effects1*(input$effects_Weight/100)))/((input$exposure_Weight + input$effects_Weight)/100))
         df$PolBurSc1 <- (df$PolBur1/max(df$PolBur1, na.rm = T))*10
         df$PopCharSc1 <- (df$PopChar1/max(df$PopChar1, na.rm = T))*10
+        
+        print(paste("POPchar: ", df$PopChar1[df$GEOID == 360679400001]))
+        print(paste("POPchar_o: ", df$PopChar[df$GEOID == 360679400001]))
+        print(paste("PolBur: ", df$PolBur1[df$GEOID == 360679400001]))
+        print(paste("PolBur_o: ", df$PolBur[df$GEOID == 360679400001]))
+        print(paste("POPchar_score: ", df$PopCharSc1[df$GEOID == 360679400001]))
+        print(paste("POPchar_score_o: ", df$PopCharSc[df$GEOID == 360679400001]))
+        print(paste("PolBur_score: ", df$PolBurSc1[df$GEOID == 360679400001]))
+        print(paste("PolBur_score_o: ", df$PolBurSc[df$GEOID == 360679400001]))
         
         df$nyeScore1 <- df$PolBurSc1*df$PopCharSc1
         df$StP_nyeScore1 <- round(as.numeric(percent_rank(df$nyeScore1)*100),2)
@@ -277,23 +323,82 @@ server <- function(input, output, session) {
     })
     
     Myval2 <- eventReactive(input$button_click,{
-        df <- df %>%
-            mutate(exposure1 = rowMeans(dplyr::select(., input$exposure),
-                                        na.rm = T)*100,
-                   effects1 = rowMeans(dplyr::select(., input$effects),
-                                       na.rm = T)*100,
-                   Sensitivepops1 = rowMeans(dplyr::select(., input$Sensa),
-                                             na.rm = T)*100,
-                   SocioEcon1 = rowMeans(dplyr::select(.,input$SocDem),
-                                         na.rm = T)*100) %>% ungroup()
+        #exposure
+        if(input$exposure_type == "Mean") {
+            df <- df %>% 
+                mutate(exposure1 = rowMeans(dplyr::select(., input$exposure),
+                                            na.rm = T)*100)}
+        if(input$exposure_type == "Sum") {
+            df <- df %>%
+                mutate(exposure1 = rowSums(dplyr::select(., input$exposure),
+                                           na.rm = T)*100)}
+        if(input$exposure_type == "Product") {
+            df <- df %>%
+                mutate(exposure1 = rowProds(dplyr::select(., input$exposure),
+                                            na.rm = T)*100)}
+        if(input$exposure_type == "Maximum") {
+            df <- df %>%
+                mutate(exposure1 = rowMaxs(dplyr::select(., input$exposure),
+                                           na.rm = T)*100)}
+        #SocDem
+        if(input$SocDem_type == "Mean") {
+            df <- df %>% 
+                mutate(SocioEcon1 = rowMeans(dplyr::select(., input$SocDem),
+                                             na.rm = T)*100)}
+        if(input$SocDem_type == "Sum") {
+            df <- df %>%
+                mutate(SocioEcon1 = rowSums(dplyr::select(., input$SocDem),
+                                            na.rm = T)*100)}
+        if(input$SocDem_type == "Product") {
+            df <- df %>%
+                mutate(SocioEcon1 = rowProds(dplyr::select(., input$SocDem),
+                                             na.rm = T)*100)}
+        if(input$SocDem_type == "Maximum") {
+            df <- df %>%
+                mutate(SocioEcon1 = rowMaxs(dplyr::select(., input$SocDem),
+                                            na.rm = T)*100)}
+        #Sensitivepops
+        if(input$Sensa_type == "Mean") {
+            df <- df %>% 
+                mutate(Sensitivepops1 = rowMeans(dplyr::select(., input$Sensa),
+                                                 na.rm = T)*100)}
+        if(input$Sensa_type == "Sum") {
+            df <- df %>%
+                mutate(Sensitivepops1 = rowSums(dplyr::select(., input$Sensa),
+                                                na.rm = T)*100)}
+        if(input$Sensa_type == "Product") {
+            df <- df %>%
+                mutate(Sensitivepops1 = rowProds(dplyr::select(., input$Sensa),
+                                                 na.rm = T)*100)}
+        if(input$Sensa_type == "Maximum") {
+            df <- df %>%
+                mutate(Sensitivepops1 = rowMaxs(dplyr::select(., input$Sensa),
+                                                na.rm = T)*100)}
+        #SocDem
+        if(input$effects_type == "Mean") {
+            df <- df %>% 
+                mutate(effects1 = rowMeans(dplyr::select(., input$effects),
+                                           na.rm = T)*100)}
+        if(input$effects_type == "Sum") {
+            df <- df %>%
+                mutate(effects1 = rowSums(dplyr::select(., input$effects),
+                                          na.rm = T)*100)}
+        if(input$effects_type == "Product") {
+            df <- df %>%
+                mutate(effects1 = rowProds(dplyr::select(., input$effects),
+                                           na.rm = T)*100)}
+        if(input$effects_type == "Maximum") {
+            df <- df %>%
+                mutate(effects1 = rowMaxs(dplyr::select(., input$effects),
+                                          na.rm = T)*100)}
         
-        df$PopChar1 <- ((df$SocioEcon1 + df$Sensitivepops1)/2)
-        df$PolBur1  <- ((df$exposure1 + (df$effects1/2))/1.5)
+        
+        df$PopChar1 <- ((df$SocioEcon1*(input$SocDem_Weight/100) + df$Sensitivepops1*(input$Sensa_Weight/100))/((input$SocDem_Weight + input$Sensa_Weight)/100))
+        df$PolBur1  <- ((df$exposure1*(input$exposure_Weight/100) + (df$effects1*(input$effects_Weight/100)))/((input$exposure_Weight + input$effects_Weight)/100))
         df$PolBurSc1 <- (df$PolBur1/max(df$PolBur1, na.rm = T))*10
         df$PopCharSc1 <- (df$PopChar1/max(df$PopChar1, na.rm = T))*10
         
         df$nyeScore1 <- df$PolBurSc1*df$PopCharSc1
-        
         df$StP_nyeScore1 <- round(as.numeric(percent_rank(df$nyeScore1)*100),2)
         dfs <- df %>% dplyr::select(9,38:62) %>%
             summarise_all(sum) %>% gather("Income Bracket",
@@ -461,7 +566,7 @@ server <- function(input, output, session) {
                             fillColor = "purple",
                             highlightOptions = highlightOptions(color = "white", weight = 2,
                                                                 bringToFront = TRUE),
-                            popup = ~paste(GEOID)) %>%                                                                            
+                            popup = ~paste0("BlockGroupID: ", GEOID)) %>%                                                                            
                 addLegend("bottomleft", colors = "purple", labels = "2000 PEJA",
                           title = "2000 Potential Environmental Justice Areas", opacity = 1, layerId = "legend")
             
@@ -471,7 +576,7 @@ server <- function(input, output, session) {
         names(df2) <- c("GEOID", "myval")
         ejshp <- merge(ejshp, df2, by = "GEOID", all.x = TRUE)
 
-        pal <-  colorQuantile("viridis",  -ejshp$myval)
+        pal <-  colorQuantile("viridis",  ejshp$myval)
         
         #### size by percent of total? ### might be a solution to the sizing problem...... looks great so far tho! 
         leafletProxy("map", data = ejshp) %>%
@@ -480,10 +585,10 @@ server <- function(input, output, session) {
             removeControl(layerId = "legend") %>%
             addPolygons(color = "#444444", weight = .2, smoothFactor = 0.5,
                         opacity = 1.0, fillOpacity = 0.5,
-                        fillColor = ~colorQuantile("viridis",  -myval)(-myval),
+                        fillColor = ~colorQuantile("viridis",  myval)(myval),
                         highlightOptions = highlightOptions(color = "white", weight = 2,
                                                             bringToFront = TRUE),
-                        popup = ~paste(myval)) %>%                                                                            
+                        popup = ~paste(input$Allmets, myval, sep = ": ")) %>%                                                                            
             addLegend("bottomleft", pal = pal, values = ejshp$myval,
                       title = "NYenviroScreen Percentile", opacity = 1, layerId = "legend")
         }
@@ -492,9 +597,10 @@ server <- function(input, output, session) {
     
     observeEvent(input$button_click,{
         df1 <- Myval() 
-        df1 <- df1 %>% dplyr::select(GEOID, StP_nyeScore1)
+        df1 <- df1 %>% dplyr::select(GEOID, StP_nyeScore1, nyeScore1, SocioEcon1,
+                                     Sensitivepops1, exposure1,effects1)
         ejshp <- merge(ejshp, df1, by = "GEOID", all.x = TRUE)
-        pal <-  colorQuantile("viridis",  -ejshp$StP_nyeScore)
+        # pal <-  colorQuantile("viridis",  -ejshp$StP_nyeScore)
         
         if(input$onlyPEJA == T){
             ejshp <- ejshp[ejshp$StP_nyeScore1 >= input$thres, ]
@@ -512,11 +618,23 @@ server <- function(input, output, session) {
                 removeControl(layerId = "legend") %>%
                 addPolygons(color = "#444444", weight = .2, smoothFactor = 0.5,
                             opacity = 1.0, fillOpacity = 0.5,
-                            fillColor = ~colorQuantile("viridis",  -StP_nyeScore1)(-StP_nyeScore1),
+                            fillColor = ~colorQuantile("viridis",  StP_nyeScore1)(StP_nyeScore1),
                             highlightOptions = highlightOptions(color = "white", weight = 2,
                                                                 bringToFront = TRUE),
-                            popup = ~paste(StP_nyeScore1)) %>%                                                                            
-                addLegend("bottomleft", pal = pal, values = ejshp$StP_nyeScore1,
+                            popup = ~paste0("<b>Block Group: </b>", GEOID, "<br>",
+                                            "<b><u>NYenviroScreen Score Percentile:</b></u> ", round(StP_nyeScore,2), "<br>",
+                                            "<b>NYenviroScreen Score: </b>", round(nyeScore,2), "<br>",
+                                            "<b>Sociodemographic Score: </b>", round(SocioEcon,2), "<br>",
+                                            "<b>Sensative Population Score: </b>", round(Sensitivepops,2), "<br>",
+                                            "<b>Environmental Exposure Score: </b>", round(exposure,2), "<br>",
+                                            "<b>Environmental Effects Score: </b>", round(effects,2), "<br>",
+                                            "<b><u>Custom Score Percentile:</b></u> ", round(StP_nyeScore1,2), "<br>",
+                                            "<b>Custom Score:  </b>", round(nyeScore1,2), "<br>",
+                                            "<b>Custom Sociodemographic Score: </b>", round(SocioEcon1,2), "<br>",
+                                            "<b>Custom Sensative Population Score: </b>", round(Sensitivepops1,2), "<br>",
+                                            "<b>Custom Environmental Exposure Score: </b>", round(exposure1,2), "<br>",
+                                            "<b>Custom Environmental Effects Score: </b>", round(effects1,2))) %>%                                                                            
+                addLegend("bottomleft", pal = colorQuantile("viridis",  ejshp$StP_nyeScore1), values = ejshp$StP_nyeScore1,
                           title = "NYenviroScreen Percentile", opacity = 1, layerId = "legend")
 
     })
@@ -525,3 +643,5 @@ server <- function(input, output, session) {
 
 
 shinyApp(ui, server)
+
+
