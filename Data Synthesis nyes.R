@@ -59,6 +59,9 @@ rm(ejScreen)
 # unzip("data/heat_vulnerability_index_data.zip", exdir="./data")
 NY_heat_vul <- read_excel("data/NYS Heat Vulnerability Index Data_by Census Tract.xlsx")
 
+#nyc.... hmmmm different levels of geography.... will revisit 
+#http://a816-dohbesp.nyc.gov/IndicatorPublic/VisualizationData.aspx?id=2191,4466a0,100,Summarize
+
 ##
 # Heath indicators 
 ##
@@ -459,9 +462,11 @@ mydf11 <- left_join(mydf10, acs2018_ny_tract, by = c("CensusTractID" = "GEOID"))
 
 ny_enviro_screen_data <- mydf11
 
+#save it 
 
+write_rds(ny_enviro_screen_data, "data/ny_enviro_screen_data.rds")
 
-
+ny_enviro_screen_data <- readRDS("data/ny_enviro_screen_data.rds")
 
 
 
