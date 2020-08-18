@@ -2,7 +2,7 @@
 
 #now lets map this shit
 
-# some good mapping tools
+# some  good mapping tools
 # https://www.r-spatial.org/r/2018/10/25/ggplot2-sf-3.html
 # https://www.r-bloggers.com/inset-maps-with-ggplot2/
 

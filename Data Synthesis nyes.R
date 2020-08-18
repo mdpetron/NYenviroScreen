@@ -50,6 +50,7 @@ ejScreen <- read_csv("data/EJSCREEN_2019_USPR.csv")
 #subset to NY
 ejScreenNY <- ejScreen %>% filter(ST_ABBREV == "NY")
 rm(ejScreen)
+gc()
 ##
 # NYS Heat Vulnerability Index Data
 ##
@@ -210,10 +211,10 @@ tribe_areas <- native_areas()
 #convert to sf object
 library(sf)
 
-
 urb_zones_sf <- st_as_sf(urb_zones)
 nyblock_groups_sf <- st_as_sf(nyblock_groups)
-tribe_areas_sf <- st_as_sf(tribe_areas)
+nyblock_groups_2000_sf <- st_as_sf(nyblock_groups_2000)
+ tribe_areas_sf <- st_as_sf(tribe_areas)
 # ok lets do an intersection to get the percentage of urban area and native area for each ny bg
 # Check the projection
 # st_crs(urb_zones_sf)
@@ -224,6 +225,15 @@ int2 <- st_as_sf(int)
 attArea <- int2 %>% 
   mutate(area = st_area(.) %>% as.numeric())
 attArea$amount_in_Urban <- attArea$area/(as.numeric(attArea$ALAND) + as.numeric(attArea$AWATER))
+
+#2000 vs 2010 urb zones 
+
+int2k <- st_intersection(nyblock_groups_2000_sf, urb_zones_sf)
+ int22k <- st_as_sf(int2k)
+attArea2k <- int22k %>% 
+  mutate(area = st_area(.) %>% as.numeric())
+attArea2k$amount_in_Urban <- attArea2k$area/(as.numeric(attArea2k$ALAND) + as.numeric(attArea2k$AWATER))
+
 #tribes interstion and area percentages
 int_tribe <- st_intersection(nyblock_groups_sf, tribe_areas_sf)
 int_tribe <- st_as_sf(int_tribe)
@@ -256,29 +266,35 @@ Urban <- Urban %>% group_by(GEOID) %>%
   mutate(Urban_Area_50per = ifelse(amount_in_Urban > 0.5, 1, 0)) %>%
   dplyr::select(GEOID, amount_in_Urban, Urban_Area_50per)
 
+Urban2k <- as.data.frame(attArea2k)
+Urban2k <- Urban2k %>% group_by(GEOID) %>%
+  summarise(amount_in_Urban = sum(amount_in_Urban, na.rm = T)) %>% ungroup() %>%
+  mutate(Urban_Area_50per = ifelse(amount_in_Urban > 0.5, 1, 0)) %>%
+  dplyr::select(GEOID, amount_in_Urban, Urban_Area_50per)
+
 
 #simplify boundaries for better app performance
 library(rmapshaper)
 # library(maptools)
 # library(gpclib)
 # library(lwgeom)
-# library(sp)
+# library(sp)  
 # library(rgeos)
 # library(raster)
 
 
 nyblock_groups_simp <- ms_simplify(nyblock_groups)
 
-##
+ ##
 # Census data from 2000 and 2018 for comparison with CP-29 PEJAs
 ##
 
 # investigate the data you may need
-v00 <- load_variables(2000, "sf3")
- v01 <- load_variables(2000, "sf1")
- v02 <- load_variables(2018, dataset = "acs5")
- 
- rent <- v02 %>% filter(grepl("Income in the past 12 months below poverty level", label))
+#  v00 <- load_variables(2000, "sf3")
+#  v01 <- load_variables(2000, "sf1")
+#  v02 <- load_variables(2018, dataset = "acs5")
+#  rent <- v02 %>% filter(grepl("Income in the past 12 months below poverty level", label))
+
 # mine <- v01 %>% filter(name == "P001001")
 # 
 # write.csv(v00, "census2000vars.csv")
@@ -392,7 +408,13 @@ nyblock_groups_2000$GEOID <- paste0(nyblock_groups_2000$STATE, nyblock_groups_20
 nyblock_groups_2000$peja2k.1 <- ifelse(nyblock_groups_2000$GEOID %in% kmllist1$Name, 1, 0)
 
 ej2k <- merge(nyblock_groups_2000, dc2000_ny1, by = "GEOID")
+
+#need to do the same procedure with the urban areas in 2000 to compare urban/rural coverage 
+#merge in urban2k
+ej2k <- merge(ej2k, Urban2k, by = "GEOID")
 peja2k.2 <- subset(ej2k, ej2k$peja2k.1 == 1)
+
+
 
 # did it work? - map it
 # peja2k.2 %>%
@@ -463,7 +485,7 @@ mydf11 <- left_join(mydf10, acs2018_ny_tract, by = c("CensusTractID" = "GEOID"))
 ny_enviro_screen_data <- mydf11
 
 #save it 
-
+ 
 write_rds(ny_enviro_screen_data, "data/ny_enviro_screen_data.rds")
 
 ny_enviro_screen_data <- readRDS("data/ny_enviro_screen_data.rds")

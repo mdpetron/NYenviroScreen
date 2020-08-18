@@ -6,7 +6,11 @@
 # data selection
 names(ny_enviro_screen_data)
 
-df <- ny_enviro_screen_data %>%
+#remove bgs with no population 
+
+ny_enviro_screen_data_wpop <- ny_enviro_screen_data %>% filter(ACSTOTPOP > 0)
+
+df <- ny_enviro_screen_data_wpop %>%
   dplyr::select(######sociodemo######## 
          MINORPCT, #minority
          LOWINCPCT, #lowincome
@@ -54,6 +58,7 @@ df <- ny_enviro_screen_data %>%
          #### Evaluation Metrics ####
          ID,
          CensusTractID,
+         amount_in_Urban,
          medincome,
          rentasPercageofIncome,
          per_poverty,
@@ -67,6 +72,7 @@ df <- ny_enviro_screen_data %>%
          Hispanic,
          #income
          Households,
+         AREALAND,
          inc_lessthan10k,
          inc_10to15,
          inc_15to20,
@@ -145,7 +151,7 @@ df <- df %>%
                                                 StP_OVER64PCT,
                                                 StP_FoodAccess,
                                                 StP_HVIScore,
-                                                StP_shr_hu_fp_any),
+                                                StP_shr_hu_fp_any), 
                             na.rm = T)*100,
          SocioEcon = rowMeans(dplyr::select(.,StP_LOWINCPCT,
                                      StP_LESSHSPCT,
@@ -170,7 +176,7 @@ df$StP_nyeScore <- round(as.numeric(percent_rank(df$nyeScore)*100),2)
 library(classInt)
 
 ##############
-#Natural break fro poverty percentage
+#Natural break for poverty percentage
 ################
 
 #need to make sure we classify all of the rural areas
@@ -190,7 +196,7 @@ p2kperblk <- Urb_race$MINORPCT
 p2kperblk <- sort(p2kperblk, decreasing = TRUE)
 p2kperblk <- p2kperblk[complete.cases(p2kperblk)]
 jenks.ints.race.urb <- classIntervals(p2kperblk, 2, style = "jenks") 
-jenks.ints.race.urb$brks #.524
+ jenks.ints.race.urb$brks #.524
 
 rur_race <- df %>% filter(Urban_Area_50per == 0)
 p2kperblk <- rur_race$MINORPCT
@@ -273,29 +279,30 @@ df2k <- df2k %>% mutate(
                             na.rm = T)
 ) 
 
+names(df)
 
-dfs <- df %>% dplyr::select(36:44, 103:106) %>%
+dfs <- df %>% dplyr::select(37:46, 105:108) %>%
   summarise_all(sum) %>% gather("Income Bracket",
                                 "Total NY Households/Population 2018")
-dfsb <- df %>% filter(peja_18_cal == 1) %>% dplyr::select(36:44, 103:106) %>%
+dfsb <- df %>% filter(peja_18_cal == 1) %>% dplyr::select(37:46, 105:108) %>%
   summarise_all(sum) %>% gather("Income Bracket",
                                 "NYeviroScreen - CalEPA Style Coverage")
-dfsc <- df %>% filter(peja_18_hybrid == 1) %>% dplyr::select(36:44, 103:106) %>%
+dfsc <- df %>% filter(peja_18_hybrid == 1) %>% dplyr::select(37:46, 105:108) %>%
   summarise_all(sum) %>% gather("Income Bracket",
                                 "NYenviroScreen - Hybrid Coverage")
-dfsd <- df %>% filter(peja_18_breaks == 1) %>% dplyr::select(36:44, 103:106) %>%
+dfsd <- df %>% filter(peja_18_breaks == 1) %>% dplyr::select(37:46, 105:108) %>%
   summarise_all(sum) %>% gather("Income Bracket",
                                 "NYenviroScreen - Natural Breaks Coverage")
 dfsd$`Income Bracket` 
 # make a 2000 dataset to compare percent coverage by each eval metric
 
-names(df2k)
+df2k$AREALAND <- df2k$AREA
 dfsc1 <- df2k %>% mutate(population = total_pop) %>%
-  dplyr::select(14:16, 33, 34, 36, 38:43) %>%
+  dplyr::select(14:16, 33:38, 40:46) %>%
   summarise_all(sum, na.rm =T) %>% gather("Income Bracket",
                                           "Total Households or Population 2000")
 dfsc2 <- df2k %>% filter(peja2k.1 == 1) %>% mutate(population = total_pop) %>%
-  dplyr::select(14:16, 33, 34, 36, 38:43) %>%
+  dplyr::select(14:16, 33:38, 40:46) %>%
   summarise_all(sum) %>% gather("Income Bracket",
                                 "2000 PEJA Coverage")
 
@@ -330,8 +337,8 @@ x2 <- nrow(df[df$Urban_Area_50per == 1, ])
 x3 <- nrow(df[df$peja_18_cal == 1 & df$Urban_Area_50per == 1, ])
 x4 <- nrow(df[df$peja_18_hybrid == 1 & df$Urban_Area_50per == 1, ])
 x5 <- nrow(df[df$peja_18_breaks == 1 & df$Urban_Area_50per == 1, ])
-x6 <- nrow(df2k[df2k$urb2k == 1, ])
-x7 <- nrow(df2k[df2k$peja2k.1 == 1 & df2k$urb2k == 1, ])
+x6 <- nrow(df2k[df2k$Urban_Area_50per == 0, ])
+x7 <- nrow(df2k[df2k$peja2k.1 == 1 & df2k$Urban_Area_50per == 0, ])
 
 urbbg_adder <- data.frame(x1,
                           x2,
@@ -348,8 +355,8 @@ x2 <- nrow(df[df$Urban_Area_50per != 1, ])
 x3 <- nrow(df[df$peja_18_cal == 1 & df$Urban_Area_50per != 1, ])
 x4 <- nrow(df[df$peja_18_hybrid == 1 & df$Urban_Area_50per != 1, ])
 x5 <- nrow(df[df$peja_18_breaks == 1 & df$Urban_Area_50per != 1, ])
-x6 <- nrow(df2k[df2k$urb2k != 1, ])
-x7 <- nrow(df2k[df2k$peja2k.1 == 1 & df2k$urb2k != 1, ])
+x6 <- nrow(df2k[df2k$Urban_Area_50per != 0, ])
+x7 <- nrow(df2k[df2k$peja2k.1 == 1 & df2k$Urban_Area_50per != 0, ])
 
 rurbg_adder <- data.frame(x1,
                           x2,
@@ -362,39 +369,44 @@ names(rurbg_adder) <- names(comp_plot_df)
 comp_plot_df <- bind_rows(comp_plot_df, rurbg_adder)
 
 
+
+
 comp_plot_df$`Income Bracket` <- c("Population ",      "White ",    
                                   "Black ",     "Native American ",
                                   "Asian ",     "Other ",    
                                   "Two or more races ",     "Hispanic",       
-                                  "Households ",      "Less than 10k-25k ",
+                                  "Households ", "Land Area ",     "Less than 10k-25k ",
                                   "25k-45k ",            "45k-100k ",
                                   "Block Groups ",      "100k and more ",
                                   "Urban Block Groups ", "Rural Block Groups ")
 
 
 
+########### major issue with 2000 urban rural here. must skip for now###########################################################################################
+
+
+#merge with simplified shapefiles 
+ejshp <- merge(nyblock_groups_simp, df, by.x = "GEOID", by.y = "ID", all.x = TRUE)
+
+ejshp <- ejshp[ejshp$GEOID %in% df$ID, ]
 
 
 
-
-
-
-
-#ehhhh
-register_google("AIzaSyB-Hnhq04eitbDv697lEtRPbJKBoN106GQ")
-library(ggmap)
-
-lon <- c(-74,-75)
-lat <- c(40.5,41)
-map <- get_map(location = c(lon = -74.1502, lat = 40.5795),
-               maptype = "roadmap", source = "google", zoom = 12)
-
-p <- ggmap(map, extent = "normal", maprange = FALSE) +
-  geom_polygon(data = fortify(Rich),
-               aes(long, lat, group = group),
-               fill = "orange", colour = "red", alpha = 0.2)
-
-print(p)
+# #ehhhh
+# register_google("AIzaSyB-Hnhq04eitbDv697lEtRPbJKBoN106GQ")
+# library(ggmap)
+# 
+# lon <- c(-74,-75)
+# lat <- c(40.5,41)
+# map <- get_map(location = c(lon = -74.1502, lat = 40.5795),
+#                maptype = "roadmap", source = "google", zoom = 12)
+# 
+# p <- ggmap(map, extent = "normal", maprange = FALSE) +
+#   geom_polygon(data = fortify(Rich),
+#                aes(long, lat, group = group),
+#                fill = "orange", colour = "red", alpha = 0.2)
+# 
+# print(p)
 
 #sweet
 write_rds(ejshp, "C:/Users/Mike Petroni/Documents/GitHub/NYenviroScreen/NYenviroScreen-app/www/ejshp_061520.rds")
