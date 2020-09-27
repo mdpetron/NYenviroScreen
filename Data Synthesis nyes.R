@@ -49,8 +49,11 @@ ejScreen <- read_csv("data/EJSCREEN_2019_USPR.csv")
 #names(ejScreen)
 #subset to NY
 ejScreenNY <- ejScreen %>% filter(ST_ABBREV == "NY")
+#remove the large file from your workspace
 rm(ejScreen)
 gc()
+
+
 ##
 # NYS Heat Vulnerability Index Data
 ##
@@ -60,7 +63,7 @@ gc()
 # unzip("data/heat_vulnerability_index_data.zip", exdir="./data")
 NY_heat_vul <- read_excel("data/NYS Heat Vulnerability Index Data_by Census Tract.xlsx")
 
-#nyc.... hmmmm different levels of geography.... will revisit 
+#nyc option
 #http://a816-dohbesp.nyc.gov/IndicatorPublic/VisualizationData.aspx?id=2191,4466a0,100,Summarize
 
 ##
@@ -82,7 +85,6 @@ NY_health_short <- NY_health %>% filter(Indicator %in% c(
     group_by(`County Name`) %>%
   spread(Indicator, `Percentage/Rate/Ratio`) %>% ungroup()
 
-  
 #county fips 
 #downlaod the fips coade for each county to use as a merging field 
 acs2018_ny_county <- get_acs(geography = "county", 
@@ -114,29 +116,25 @@ can_inc_sh <- left_join(crosswalk, can_inc_sh, by = c("dohregion" = "Dohregion")
 can_inc_sh <- can_inc_sh %>% select(-dohregion) %>% distinct()
   
 
-### https://studentwork.prattsi.org/infovis/visualization/food-desert-new-york-state-2010-census-demographics/
 
 # USDA tract level food deserts 2015
+### example https://studentwork.prattsi.org/infovis/visualization/food-desert-new-york-state-2010-census-demographics/
 # download.file("https://www.ers.usda.gov/webdocs/DataFiles/80591/DataDownload2015.xlsx?v=5315.6",
 #                destfile = "data/DataDownload2015.xlsx", mode="wb")
+#not state wide
 Food_insecure <- read_excel("data/DataDownload2015.xlsx",
                             sheet = 3) 
 Food_insecure_ny <- Food_insecure %>% filter(State == "New York") %>% 
   dplyr::select(CensusTract, LILATracts_1And10)
 
-#this does not have all of our tracts 
-
 # Drinking water
 # https://www.health.ny.gov/statistics/environmental/public_health_tracking/about_pages/drinking_water/export
 # see page 26 for method https://oehha.ca.gov/media/downloads/calenviroscreen/report/ces3dwmethodology.pdf
 NY_drink <- read_csv("https://apps.health.ny.gov/statistics/environmental/public_health_tracking/tracker/files/water/drinking_water.csv")
-#create a county average (blunt but all we can do right now)
-
+#create a county average (blunt, but all we can do right now)
 NY_drink <- left_join(NY_drink, countykey, by = c("PRIN_CNTY" = "County Name"))
-
 #take the most recent year... 2009? 
 NY_drink_09 <- NY_drink %>% filter(YEAR == 2009)
-unique(NY_drink_09$PRIN_CNTY)
 
 #make the NA values 
 NY_drink_09 <- NY_drink_09 %>%
@@ -210,7 +208,6 @@ tribe_areas <- native_areas()
 
 #convert to sf object
 library(sf)
-
 urb_zones_sf <- st_as_sf(urb_zones)
 nyblock_groups_sf <- st_as_sf(nyblock_groups)
 nyblock_groups_2000_sf <- st_as_sf(nyblock_groups_2000)
@@ -242,17 +239,6 @@ attArea_tribe <- int_tribe %>%
   mutate(area = st_area(.) %>% as.numeric())
 attArea_tribe$amount_in_Tribe <- attArea_tribe$area/(as.numeric(attArea_tribe$ALAND) + as.numeric(attArea_tribe$AWATER))
 
-# make sure that the SF intersection process works 
-# test <- attArea %>% filter(GEOID == 360039505001)
-# testT <- tribe_areas_sf %>% filter(GEOID == "2535R")
-# testBG <- nyblock_groups_sf %>% filter(GEOID == 360039505001)
-# tstinter <- int_tribe %>% filter(GEOID == 360039505001)
-#  library(leaflet)
-# tst_BG_sp %>%
-#   leaflet() %>%
-#   addTiles() %>%
-#   addPolygons(fill = "blue")
-
 #now lets merge our indictors back into the dataset 
 
 tribes <- as.data.frame(attArea_tribe)
@@ -275,14 +261,6 @@ Urban2k <- Urban2k %>% group_by(GEOID) %>%
 
 #simplify boundaries for better app performance
 library(rmapshaper)
-# library(maptools)
-# library(gpclib)
-# library(lwgeom)
-# library(sp)  
-# library(rgeos)
-# library(raster)
-
-
 nyblock_groups_simp <- ms_simplify(nyblock_groups)
 
  ##
@@ -294,11 +272,6 @@ nyblock_groups_simp <- ms_simplify(nyblock_groups)
 #  v01 <- load_variables(2000, "sf1")
 #  v02 <- load_variables(2018, dataset = "acs5")
 #  rent <- v02 %>% filter(grepl("Income in the past 12 months below poverty level", label))
-
-# mine <- v01 %>% filter(name == "P001001")
-# 
-# write.csv(v00, "census2000vars.csv")
-# ?load_variables
 
 #these will be used to create charts to quantify coverage,
 #we want race breakout, income breakout
@@ -382,9 +355,8 @@ names(dc2000_ny)
 dc2000_ny1 <- dc2000_ny %>% dplyr::select(-NAME) %>% group_by(GEOID) %>%
   spread(variable, value) %>% distinct() %>% ungroup()
 
-# from the old script
-################ 2000 ######################
-#can we take this directly from the DEC?
+
+################ 2000 PEJAs ######################
 #here is how this works, go to DEC website - https://www.dec.ny.gov/public/911.html
 #download the kmz layer in google earth, open it in google earth, then save it as a kml
 #get the layers
@@ -400,7 +372,6 @@ kmllist <- lapply(1:length(layers_peja$name), function (x)  read_kml(x))
 kmllist1 <- kmllist[[1]]
 for (i in 2:length(kmllist)) kmllist1 <- bind_rows(kmllist1, kmllist[[i]])
 
-
 #merge with shapefiles
 nyblock_groups_2000$GEOID <- paste0(nyblock_groups_2000$STATE, nyblock_groups_2000$COUNTY,
                                     nyblock_groups_2000$TRACT, nyblock_groups_2000$BLKGROUP)
@@ -413,14 +384,6 @@ ej2k <- merge(nyblock_groups_2000, dc2000_ny1, by = "GEOID")
 #merge in urban2k
 ej2k <- merge(ej2k, Urban2k, by = "GEOID")
 peja2k.2 <- subset(ej2k, ej2k$peja2k.1 == 1)
-
-
-
-# did it work? - map it
-# peja2k.2 %>%
-#   leaflet() %>%
-#   addTiles() %>%
-#   addPolygons(fill = "blue")
 
 ## combine data sets 
 ##blocks
@@ -479,16 +442,12 @@ acs2018_ny_tract <- acs2018_ny_tract %>% group_by(GEOID) %>%
 summarise(per_poverty = below_fed_poverty_level/population) %>% ungroup()
 mydf11 <- left_join(mydf10, acs2018_ny_tract, by = c("CensusTractID" = "GEOID"))
 
-
-#holy shit 500 variables!!
-
 ny_enviro_screen_data <- mydf11
 
 #save it 
  
-write_rds(ny_enviro_screen_data, "data/ny_enviro_screen_data.rds")
-
-ny_enviro_screen_data <- readRDS("data/ny_enviro_screen_data.rds")
+# write_rds(ny_enviro_screen_data, "data/ny_enviro_screen_data.rds")
+# ny_enviro_screen_data <- readRDS("data/ny_enviro_screen_data.rds")
 
 
 

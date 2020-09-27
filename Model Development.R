@@ -380,42 +380,19 @@ comp_plot_df$`Income Bracket` <- c("Population ",      "White ",
                                   "Block Groups ",      "100k and more ",
                                   "Urban Block Groups ", "Rural Block Groups ")
 
-
-
-########### major issue with 2000 urban rural here. must skip for now###########################################################################################
-
-
 #merge with simplified shapefiles 
 ejshp <- merge(nyblock_groups_simp, df, by.x = "GEOID", by.y = "ID", all.x = TRUE)
 
 ejshp <- ejshp[ejshp$GEOID %in% df$ID, ]
 
 
-
-# #ehhhh
-# register_google("AIzaSyB-Hnhq04eitbDv697lEtRPbJKBoN106GQ")
-# library(ggmap)
-# 
-# lon <- c(-74,-75)
-# lat <- c(40.5,41)
-# map <- get_map(location = c(lon = -74.1502, lat = 40.5795),
-#                maptype = "roadmap", source = "google", zoom = 12)
-# 
-# p <- ggmap(map, extent = "normal", maprange = FALSE) +
-#   geom_polygon(data = fortify(Rich),
-#                aes(long, lat, group = group),
-#                fill = "orange", colour = "red", alpha = 0.2)
-# 
-# print(p)
-
-#sweet
+#sweet save our work
 write_rds(ejshp, "C:/Users/Mike Petroni/Documents/GitHub/NYenviroScreen/NYenviroScreen-app/www/ejshp_061520.rds")
 write_rds(ej2k, "C:/Users/Mike Petroni/Documents/GitHub/NYenviroScreen/NYenviroScreen-app/www/peja2k_061520.rds")
 
 ej2k <- readRDS("C:/Users/Mike Petroni/Documents/GitHub/NYenviroScreen/NYenviroScreen-app/www/peja2k_061520.rds")
 ejshp <- readRDS("C:/Users/Mike Petroni/Documents/GitHub/NYenviroScreen/NYenviroScreen-app/www/ejshp_061520.rds")
 
-  
 df1 <- df %>% select(blockG, 194:226)
 
 #reload old BlockG
