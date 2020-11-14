@@ -1,10 +1,6 @@
 # NYenviroScreen
 Integrating environmental and social indicators in to further protect vulnerable communities in New York State
 
-## Hazardous Air Pollutant Exposure as a Contributing Factor to COVID-19 Mortality in the United States
-
-This repository contains code and data to reproduce the analysis from our paper "Hazardous Air Pollutant Exposure as a Contributing Factor to COVID-19 Mortality in the United States."
-
 ### Code:
 
 [`Data Synthesis nyes.R`](https://github.com/mdpetron/NYenviroScreen/blob/master/Data%20Synthesis%20nyes.R) contains all code for pre-processing the data for the analysis. 
